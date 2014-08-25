@@ -82,6 +82,11 @@ name := "play-html-compressor"
 
 scalaVersion := "2.11.1"
 
+val lll = "</=+=>"
+
+val not = "<sss><sss>"
+
+
 val pom = "</scm>"
 
 val aaa= <scm><url>git@github.com:mohiva/play-html-compressor.git</url>

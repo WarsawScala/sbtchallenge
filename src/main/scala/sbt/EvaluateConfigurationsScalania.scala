@@ -170,7 +170,7 @@ class EvaluateConfigurationsScalania extends SplitExpressions {
             val xmlPart = (str.substring(startIndex + current, endIndex + 2), startIndex + current, endIndex + 2)
             findModifiedOpeningTags(endIndex + 2, xmlPart +: acc)
           } else {
-            acc
+            findModifiedOpeningTags(endIndex + 2, acc)
           }
         }
       }
