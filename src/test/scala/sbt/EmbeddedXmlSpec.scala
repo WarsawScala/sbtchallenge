@@ -86,6 +86,7 @@ val lll = "</=+=>"
 
 val not = "<sss><sss>"
 
+val aaa = "ass/>"
 
 val pom = "</scm>"
 
