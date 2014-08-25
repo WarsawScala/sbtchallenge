@@ -14,6 +14,8 @@ name := "play-html-compressor"
 
 scalaVersion := "2.11.1"
 
+val ok = <ccc atr="tre" />
+
 val pom = <scm>
     <url>git@github.com:mohiva/play-html-compressor.git</url>
     <connection>scm:git:git@github.com:mohiva/play-html-compressor.git</connection>
@@ -29,9 +31,10 @@ val pom = <scm>
 
 publishMavenStyle := true
 
-val anotherXml = <a><bbb>
+val anotherXml = <a a="r"><bbb>
         content</bbb>
         <ccc atr="tre" />
+        <aa/>
           </a>
 
 """
@@ -68,6 +71,42 @@ val pom = <scm>
       val index = buildSbt.lines.indexWhere(line => line.contains(errorLine))
       exception.getMessage.matches(s".*$index.*")
 
+
+    }
+
+
+    "Xml in string" in {
+      val buildSbt = s"""
+
+name := "play-html-compressor"
+
+scalaVersion := "2.11.1"
+
+val pom = "</scm>"
+
+val aaa= <scm><url>git@github.com:mohiva/play-html-compressor.git</url>
+    <connection>scm:git:git@github.com:mohiva/play-html-compressor.git</connection>
+  </scm>
+  <developers>
+    <developer>
+      <id>akkie</id>
+      <name>Christian Kaps</name>
+      <url>http://mohiva.com</url>
+    </developer>
+  </developers>
+  <version>4.0</version>
+
+publishMavenStyle := true
+
+val anotherXml = <a a="r"><bbb>
+        content</bbb>
+        <ccc atr="tre" />
+        <aa/>
+          </a>
+
+"""
+
+      split(buildSbt)
 
     }
 

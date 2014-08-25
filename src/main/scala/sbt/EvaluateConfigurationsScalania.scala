@@ -123,17 +123,31 @@ class EvaluateConfigurationsScalania extends SplitExpressions {
       } else {
         val closeTagEndIndex = str.indexOf(">", closeTagStartIndex)
         if (closeTagEndIndex == -1) {
-          acc
+          findXmlParts(closeTagEndIndex, acc)
         } else {
           val tagName = str.substring(closeTagStartIndex + 2, closeTagEndIndex)
           if (xml.Utility.isName(tagName)) {
-            val openTagIndex = str.substring(0, closeTagStartIndex).lastIndexOf(s"<$tagName")
-            val xmlPart = (str.substring(openTagIndex, closeTagEndIndex + 1), openTagIndex, closeTagEndIndex + 1)
-            findXmlParts(closeTagEndIndex,  xmlPart +: acc)
+            val openTagIndex = searchForOpeningIndex(closeTagStartIndex, tagName)
+            if (openTagIndex == -1) {
+              findXmlParts(closeTagEndIndex, acc)
+            } else {
+              val xmlPart = (str.substring(openTagIndex, closeTagEndIndex + 1), openTagIndex, closeTagEndIndex + 1)
+              findXmlParts(closeTagEndIndex, xmlPart +: acc)
+            }
           } else {
-            acc
+            findXmlParts(closeTagEndIndex, acc)
           }
         }
+      }
+    }
+
+    def searchForOpeningIndex(closeTagStartIndex: Int, tagName: String) = {
+      val subs = str.substring(0, closeTagStartIndex)
+      val index = subs.lastIndexOf(s"<$tagName>")
+      if (index == -1) {
+        subs.lastIndexOf(s"<$tagName ")
+      } else {
+        index
       }
     }
     /**
@@ -149,9 +163,9 @@ class EvaluateConfigurationsScalania extends SplitExpressions {
       } else {
         val startIndex = str.substring(current, endIndex).lastIndexOf("<")
         if (startIndex == -1) {
-          acc
+          findModifiedOpeningTags(endIndex + 1, acc)
         } else {
-          val tagName = str.substring(startIndex + 1 + current, endIndex)
+          val tagName = searchForTagName(startIndex + 1 + current, endIndex)
           if (xml.Utility.isName(tagName)) {
             val xmlPart = (str.substring(startIndex + current, endIndex + 2), startIndex + current, endIndex + 2)
             findModifiedOpeningTags(endIndex + 2, xmlPart +: acc)
@@ -159,6 +173,16 @@ class EvaluateConfigurationsScalania extends SplitExpressions {
             acc
           }
         }
+      }
+    }
+
+    def searchForTagName(startIndex: Int, endIndex: Int) = {
+      val subs = str.substring(startIndex, endIndex)
+      val spaceIndex = subs.indexOf(' ', 1)
+      if (spaceIndex == -1) {
+        subs
+      } else {
+        subs.substring(0, spaceIndex)
       }
     }
     findModifiedOpeningTags(0, Seq.empty) ++ findXmlParts(0, Seq.empty)
