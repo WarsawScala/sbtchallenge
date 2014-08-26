@@ -31,7 +31,13 @@ class ErrorSpec extends AbstractSpec with Checkers {
             val exception = intercept[MessageOnlyException] {
               split(buildSbt)
             }
-            exception.getMessage.matches(".*(\\d+).*")
+            val error = exception.getMessage
+            """(\d+)""".r.findFirstIn(error) match {
+              case Some(x) =>
+                true
+              case None => println(s"Number not found in $error")
+                false
+            }
           }
       })
     }

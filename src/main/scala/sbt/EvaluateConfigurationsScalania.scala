@@ -1,5 +1,7 @@
 package sbt
 
+import scala.util.{Failure, Success, Try}
+
 class EvaluateConfigurationsScalania extends SplitExpressions {
   def splitExpressions(lines: Seq[String]): (Seq[(String, Int)], Seq[(String, LineRange)]) = {
     import scala.reflect.runtime._
@@ -20,9 +22,12 @@ class EvaluateConfigurationsScalania extends SplitExpressions {
       } catch {
         case e: ToolBoxError =>
           val seq = toolbox.frontEnd.infos.map(i =>
-            s"""${i.msg} line: ${i.pos.line}"""
+            s"""[${i.severity}]: [Here should be file name]:${i.pos.line}: ${i.msg}"""
           )
-          throw new MessageOnlyException(seq.mkString(EOL))
+          throw new MessageOnlyException(
+            s"""$merged
+               |
+               |${seq.mkString(EOL)}""".stripMargin)
       }
     val parsedTrees = parsed match {
       case Block(stmt, expr) =>
@@ -49,9 +54,8 @@ class EvaluateConfigurationsScalania extends SplitExpressions {
     if (xmlParts.isEmpty) {
       original
     } else {
-      val rootXmlParts = removeEmbeddedXmlParts(xmlParts)
-      val sortedXmlParts = rootXmlParts.sortBy(z => z._2)
-      addExplicitXmlContent(original, sortedXmlParts)
+      println( s"""${xmlParts.mkString("\n")}""")
+      addExplicitXmlContent(original, xmlParts)
     }
   }
 
@@ -98,7 +102,7 @@ class EvaluateConfigurationsScalania extends SplitExpressions {
       (acc, el) =>
         val (content, b, e) = el
         val (accSeq, index) = acc
-        val toAdd = if (index == b) {
+        val toAdd = if (index >= b) {
           Seq((content, true))
         } else {
           val s = str.substring(index, b)
@@ -109,82 +113,97 @@ class EvaluateConfigurationsScalania extends SplitExpressions {
     ((str.substring(index, str.length), false) +: split).reverse
   }
 
-  private def findXmlParts(str: String) = {
-    /**
-     * Xml like - <aaa>...<aaa/>
-     * @param current - index
-     * @param acc - result
-     * @return Set with tags and positions
-     */
-    def findXmlParts(current: Int, acc: Seq[(String, Int, Int)]): Seq[(String, Int, Int)] = {
-      val closeTagStartIndex = str.indexOf("</", current)
-      if (closeTagStartIndex == -1) {
-        acc
-      } else {
-        val closeTagEndIndex = str.indexOf(">", closeTagStartIndex)
-        if (closeTagEndIndex == -1) {
-          findXmlParts(closeTagEndIndex, acc)
-        } else {
-          val tagName = str.substring(closeTagStartIndex + 2, closeTagEndIndex)
-          if (xml.Utility.isName(tagName)) {
-            val openTagIndex = searchForOpeningIndex(closeTagStartIndex, tagName)
-            if (openTagIndex == -1) {
-              findXmlParts(closeTagEndIndex, acc)
-            } else {
-              val xmlPart = (str.substring(openTagIndex, closeTagEndIndex + 1), openTagIndex, closeTagEndIndex + 1)
-              findXmlParts(closeTagEndIndex, xmlPart +: acc)
-            }
-          } else {
-            findXmlParts(closeTagEndIndex, acc)
-          }
-        }
-      }
-    }
+  private def findXmlParts(content: String) = {
+    val xmlParts = findModifiedOpeningTags(content, 0, Seq.empty) ++ findNotModifiedOpeningTags(content, 0, Seq.empty)
+    val rootXmlParts = removeEmbeddedXmlParts(xmlParts)
+    rootXmlParts.sortBy(z => z._2)
 
-    def searchForOpeningIndex(closeTagStartIndex: Int, tagName: String) = {
-      val subs = str.substring(0, closeTagStartIndex)
-      val index = subs.lastIndexOf(s"<$tagName>")
-      if (index == -1) {
-        subs.lastIndexOf(s"<$tagName ")
-      } else {
-        index
-      }
-    }
-    /**
-     * Modified Opening Tag - <aaa/>
-     * @param current - index
-     * @param acc - result
-     * @return Set with tags and positions
-     */
-    def findModifiedOpeningTags(current: Int, acc: Seq[(String, Int, Int)]): Seq[(String, Int, Int)] = {
-      val endIndex = str.indexOf("/>", current)
-      if (endIndex == -1) {
-        acc
-      } else {
-        val startIndex = str.substring(current, endIndex).lastIndexOf("<")
-        if (startIndex == -1) {
-          findModifiedOpeningTags(endIndex + 1, acc)
-        } else {
-          val tagName = searchForTagName(startIndex + 1 + current, endIndex)
-          if (xml.Utility.isName(tagName)) {
-            val xmlPart = (str.substring(startIndex + current, endIndex + 2), startIndex + current, endIndex + 2)
-            findModifiedOpeningTags(endIndex + 2, xmlPart +: acc)
-          } else {
-            findModifiedOpeningTags(endIndex + 2, acc)
-          }
-        }
-      }
-    }
-
-    def searchForTagName(startIndex: Int, endIndex: Int) = {
-      val subs = str.substring(startIndex, endIndex)
-      val spaceIndex = subs.indexOf(' ', 1)
-      if (spaceIndex == -1) {
-        subs
-      } else {
-        subs.substring(0, spaceIndex)
-      }
-    }
-    findModifiedOpeningTags(0, Seq.empty) ++ findXmlParts(0, Seq.empty)
   }
+
+  private def searchForTagName(text: String, startIndex: Int, endIndex: Int) = {
+    val subs = text.substring(startIndex, endIndex)
+    val spaceIndex = subs.indexOf(' ', 1)
+    if (spaceIndex == -1) {
+      subs
+    } else {
+      subs.substring(0, spaceIndex)
+    }
+  }
+
+  /**
+   * Modified Opening Tag - <aaa/>
+   * @param offsetIndex - index
+   * @param acc - result
+   * @return Set with tags and positions
+   */
+  private def findModifiedOpeningTags(content: String, offsetIndex: Int, acc: Seq[(String, Int, Int)]): Seq[(String, Int, Int)] = {
+    val endIndex = content.indexOf("/>", offsetIndex)
+    if (endIndex == -1) {
+      acc
+    } else {
+      val startIndex = content.substring(offsetIndex, endIndex).lastIndexOf("<")
+      if (startIndex == -1) {
+        findModifiedOpeningTags(content, endIndex + 2, acc)
+      } else {
+        val tagName = searchForTagName(content, startIndex + 1 + offsetIndex, endIndex)
+        if (xml.Utility.isName(tagName)) {
+          val xmlFragment = xmlFragmentSeq(content, startIndex + offsetIndex, endIndex + 2)
+          findModifiedOpeningTags(content, endIndex + 2, xmlFragment ++ acc)
+        } else {
+          findModifiedOpeningTags(content, endIndex + 2, acc)
+        }
+      }
+    }
+  }
+
+  private def searchForOpeningIndex(text: String, closeTagStartIndex: Int, tagName: String) = {
+    val subs = text.substring(0, closeTagStartIndex)
+    val index = subs.lastIndexOf(s"<$tagName>")
+    if (index == -1) {
+      subs.lastIndexOf(s"<$tagName ")
+    } else {
+      index
+    }
+  }
+
+  /**
+   * Xml like - <aaa>...<aaa/>
+   * @param current - index
+   * @param acc - result
+   * @return Set with tags and positions
+   */
+  private def findNotModifiedOpeningTags(content: String, current: Int, acc: Seq[(String, Int, Int)]): Seq[(String, Int, Int)] = {
+    val closeTagStartIndex = content.indexOf("</", current)
+    if (closeTagStartIndex == -1) {
+      acc
+    } else {
+      val closeTagEndIndex = content.indexOf(">", closeTagStartIndex)
+      if (closeTagEndIndex == -1) {
+        findNotModifiedOpeningTags(content, closeTagStartIndex + 2, acc)
+      } else {
+        val tagName = content.substring(closeTagStartIndex + 2, closeTagEndIndex)
+        if (xml.Utility.isName(tagName)) {
+          val openTagIndex = searchForOpeningIndex(content, closeTagStartIndex, tagName)
+          val xmlFragment =
+            if (openTagIndex == -1) {
+              Seq.empty
+            } else {
+              xmlFragmentSeq(content, openTagIndex, closeTagEndIndex + 1)
+            }
+          findNotModifiedOpeningTags(content, closeTagEndIndex + 1, xmlFragment ++ acc)
+        } else {
+          findNotModifiedOpeningTags(content, closeTagEndIndex + 1, acc)
+        }
+      }
+    }
+  }
+
+  private def xmlFragmentSeq(content: String, openIndex: Int, closeIndex: Int): Seq[(String, Int, Int)] = {
+    val xmlPart = content.substring(openIndex, closeIndex)
+    Try(xml.XML.loadString(xmlPart)) match {
+      case Success(_) => Seq((xmlPart, openIndex, closeIndex))
+      case Failure(th) => Seq.empty
+    }
+  }
+
 }

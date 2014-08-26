@@ -110,10 +110,26 @@ val anotherXml = <a a="r"><bbb>
         <aa/>
           </a>
 
+val tra = "</scm>"
+
 """
 
       split(buildSbt)
 
+    }
+
+    "Xml at end of file" in {
+      val buildSbt =
+        """
+          |val p = <a></a>
+        """.stripMargin
+    }
+
+    "Xml modified closing tag at end of file" in {
+      val buildSbt =
+        """
+          |val p = <a/>
+        """.stripMargin
     }
 
   }
