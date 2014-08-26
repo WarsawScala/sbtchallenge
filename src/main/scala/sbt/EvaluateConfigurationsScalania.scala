@@ -58,7 +58,6 @@ class EvaluateConfigurationsScalania extends SplitExpressions {
     if (xmlParts.isEmpty) {
       original
     } else {
-      //println( s"""${xmlParts.mkString("\n")}""")
       addExplicitXmlContent(original, xmlParts)
     }
   }
@@ -78,22 +77,35 @@ class EvaluateConfigurationsScalania extends SplitExpressions {
   }
 
   private def addExplicitXmlContent(str: String, to: Seq[(String, Int, Int)]): String = {
-    val all: Seq[(String, Boolean)] = splitFile(str, to)
+    val statements: Seq[(String, Boolean)] = splitFile(str, to)
     val builder = new StringBuilder
-    val (wasPreviousXml, wasXml) = all.foldLeft((false, false)) {
+    val (wasPreviousXml, wasXml, _) = statements.foldLeft((false, false, "")) {
       (acc, el) =>
-        val (wasXml, _) = acc
+        val (wasXml, _, previous) = acc
         val (content, isXml) = el
         val contentEmpty = content.trim.isEmpty
-        if (isXml) {
+        val isNotCommentedXml = if (isXml) {
           if (!wasXml) {
-            builder.append(" ( ")
+            val doubleSlash = previous.indexOf("//")
+            val endOfLine = previous.indexOf("\n")
+            if (doubleSlash == -1 || (doubleSlash < endOfLine)) {
+              builder.append(" ( ")
+              true
+            } else {
+              false
+            }
+          } else {
+            true
           }
         } else if (wasXml && !contentEmpty) {
           builder.append(" ) ")
+          false
+        } else {
+          false
         }
+
         builder.append(content)
-        (isXml || (wasXml && contentEmpty), isXml)
+        (isNotCommentedXml || (wasXml && contentEmpty), isXml, content)
     }
     if (wasPreviousXml && !wasXml) {
       builder.append(" ) ")
@@ -101,20 +113,22 @@ class EvaluateConfigurationsScalania extends SplitExpressions {
     builder.toString()
   }
 
-  private def splitFile(str: String, to: Seq[(String, Int, Int)]): Seq[(String, Boolean)] = {
-    val (split, index) = to.foldLeft((Seq.empty[(String, Boolean)], 0)) {
-      (acc, el) =>
-        val (content, b, e) = el
-        val (accSeq, index) = acc
-        val toAdd = if (index >= b) {
-          Seq((content, true))
+
+  private def splitFile(content: String, ts: Seq[(String, Int, Int)]): Seq[(String, Boolean)] = {
+    val (statements, index) = ts.foldLeft((Seq.empty[(String, Boolean)], 0)) {
+      (accSeqIndex, el) =>
+        val (statement, startIndex, endIndex) = el
+        val (accSeq, index) = accSeqIndex
+        val textStatementOption = if (index >= startIndex) {
+          None
         } else {
-          val s = str.substring(index, b)
-          Seq((content, true), (s, false))
+          val s = content.substring(index, startIndex)
+          Some((s, false))
         }
-        (toAdd ++ accSeq, e)
+        val newAccSeq = (statement, true) +: addOptionToCollection(accSeq, textStatementOption)
+        (newAccSeq, endIndex)
     }
-    ((str.substring(index, str.length), false) +: split).reverse
+    ((content.substring(index, content.length), false) +: statements).reverse
   }
 
   private def findXmlParts(content: String) = {
@@ -145,19 +159,25 @@ class EvaluateConfigurationsScalania extends SplitExpressions {
     if (endIndex == -1) {
       acc
     } else {
-      val startIndex = content.substring(offsetIndex, endIndex).lastIndexOf("<")
-      if (startIndex == -1) {
-        findModifiedOpeningTags(content, endIndex + 2, acc)
+      val xmlFragment = findModifiedOpeningTag(content, offsetIndex, endIndex)
+      val newAcc = addOptionToCollection(acc, xmlFragment)
+      findModifiedOpeningTags(content, endIndex + 2, newAcc)
+    }
+  }
+
+  private def findModifiedOpeningTag(content: String, offsetIndex: Int, endIndex: Int): Option[(String, Int, Int)] = {
+    val startIndex = content.substring(offsetIndex, endIndex).lastIndexOf("<")
+    if (startIndex == -1) {
+      None
+    } else {
+      val tagName = searchForTagName(content, startIndex + 1 + offsetIndex, endIndex)
+      if (xml.Utility.isName(tagName)) {
+        xmlFragmentOption(content, startIndex + offsetIndex, endIndex + 2)
       } else {
-        val tagName = searchForTagName(content, startIndex + 1 + offsetIndex, endIndex)
-        if (xml.Utility.isName(tagName)) {
-          val xmlFragment = xmlFragmentSeq(content, startIndex + offsetIndex, endIndex + 2)
-          findModifiedOpeningTags(content, endIndex + 2, xmlFragment ++ acc)
-        } else {
-          findModifiedOpeningTags(content, endIndex + 2, acc)
-        }
+        None
       }
     }
+
   }
 
   private def searchForOpeningIndex(text: String, closeTagStartIndex: Int, tagName: String) = {
@@ -185,27 +205,36 @@ class EvaluateConfigurationsScalania extends SplitExpressions {
       if (closeTagEndIndex == -1) {
         findNotModifiedOpeningTags(content, closeTagStartIndex + 2, acc)
       } else {
-        val tagName = content.substring(closeTagStartIndex + 2, closeTagEndIndex)
-        val xmlFragment = if (xml.Utility.isName(tagName)) {
-          val openTagIndex = searchForOpeningIndex(content, closeTagStartIndex, tagName)
-          if (openTagIndex == -1) {
-            Seq.empty
-          } else {
-            xmlFragmentSeq(content, openTagIndex, closeTagEndIndex + 1)
-          }
-        } else {
-          Seq.empty
-        }
-        findNotModifiedOpeningTags(content, closeTagEndIndex + 1, xmlFragment ++ acc)
+        val xmlFragment = findNotModifiedOpeningTag(content, closeTagStartIndex, closeTagEndIndex)
+        val newAcc = addOptionToCollection(acc, xmlFragment)
+        findNotModifiedOpeningTags(content, closeTagEndIndex + 1, newAcc)
       }
     }
   }
 
-  private def xmlFragmentSeq(content: String, openIndex: Int, closeIndex: Int): Seq[(String, Int, Int)] = {
+  private def addOptionToCollection[T](acc: Seq[T], option: Option[T]) = option.fold(acc)(el => el +: acc)
+
+  private def findNotModifiedOpeningTag(content: String, closeTagStartIndex: Int, closeTagEndIndex: Int): Option[(String, Int, Int)] = {
+
+    val tagName = content.substring(closeTagStartIndex + 2, closeTagEndIndex)
+    if (xml.Utility.isName(tagName)) {
+      val openTagIndex = searchForOpeningIndex(content, closeTagStartIndex, tagName)
+      if (openTagIndex == -1) {
+        None
+      } else {
+        xmlFragmentOption(content, openTagIndex, closeTagEndIndex + 1)
+      }
+    } else {
+      None
+    }
+
+  }
+
+  private def xmlFragmentOption(content: String, openIndex: Int, closeIndex: Int) = {
     val xmlPart = content.substring(openIndex, closeIndex)
     Try(xml.XML.loadString(xmlPart)) match {
-      case Success(_) => Seq((xmlPart, openIndex, closeIndex))
-      case Failure(th) => Seq.empty
+      case Success(_) => Some((xmlPart, openIndex, closeIndex))
+      case Failure(th) => None
     }
   }
 
