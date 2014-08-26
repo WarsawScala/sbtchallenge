@@ -42,11 +42,15 @@ class EvaluateConfigurationsScalania extends SplitExpressions {
     }
 
     def convertImport(t: Tree): (String, Int) =
-      (merged.substring(t.pos.start, t.pos.end), t.pos.start)
-    def convertStatement(t: Tree): (String, LineRange) =
-      (merged.substring(t.pos.start, t.pos.end), LineRange(t.pos.start, t.pos.end))
+      (merged.substring(t.pos.start, t.pos.end), t.pos.line)
 
-    (imports map convertImport, statements map convertStatement)
+    def convertStatement(t: Tree): Option[(String, LineRange)] = if (t.pos.isDefined) {
+      Some((merged.substring(t.pos.start, t.pos.end), LineRange(t.pos.line, t.pos.end)))
+    } else {
+      None
+    }
+
+    (imports map convertImport, (statements map convertStatement).flatten)
   }
 
   private[sbt] def handleXmlContent(original: String): String = {
@@ -54,7 +58,7 @@ class EvaluateConfigurationsScalania extends SplitExpressions {
     if (xmlParts.isEmpty) {
       original
     } else {
-      println( s"""${xmlParts.mkString("\n")}""")
+      //println( s"""${xmlParts.mkString("\n")}""")
       addExplicitXmlContent(original, xmlParts)
     }
   }
@@ -182,18 +186,17 @@ class EvaluateConfigurationsScalania extends SplitExpressions {
         findNotModifiedOpeningTags(content, closeTagStartIndex + 2, acc)
       } else {
         val tagName = content.substring(closeTagStartIndex + 2, closeTagEndIndex)
-        if (xml.Utility.isName(tagName)) {
+        val xmlFragment = if (xml.Utility.isName(tagName)) {
           val openTagIndex = searchForOpeningIndex(content, closeTagStartIndex, tagName)
-          val xmlFragment =
-            if (openTagIndex == -1) {
-              Seq.empty
-            } else {
-              xmlFragmentSeq(content, openTagIndex, closeTagEndIndex + 1)
-            }
-          findNotModifiedOpeningTags(content, closeTagEndIndex + 1, xmlFragment ++ acc)
+          if (openTagIndex == -1) {
+            Seq.empty
+          } else {
+            xmlFragmentSeq(content, openTagIndex, closeTagEndIndex + 1)
+          }
         } else {
-          findNotModifiedOpeningTags(content, closeTagEndIndex + 1, acc)
+          Seq.empty
         }
+        findNotModifiedOpeningTags(content, closeTagEndIndex + 1, xmlFragment ++ acc)
       }
     }
   }

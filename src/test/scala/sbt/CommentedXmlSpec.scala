@@ -23,5 +23,25 @@ val tra = "</scm>"
       split(buildSbt)
 
     }
+
+    "Xml in comment" in {
+      val buildSbt =
+        """
+          |// a/>
+        """.stripMargin
+
+      split(buildSbt)
+    }
+
+    "Xml in comments" in {
+      val buildSbt =
+        """
+          |import sbt._
+          |
+          |// </a
+        """.stripMargin
+
+      split(buildSbt)
+    }
   }
 }

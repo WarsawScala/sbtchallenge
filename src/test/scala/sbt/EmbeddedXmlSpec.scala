@@ -123,6 +123,8 @@ val tra = "</scm>"
         """
           |val p = <a></a>
         """.stripMargin
+
+      split(buildSbt)
     }
 
     "Xml modified closing tag at end of file" in {
@@ -130,7 +132,10 @@ val tra = "</scm>"
         """
           |val p = <a/>
         """.stripMargin
+
+      split(buildSbt)
     }
+
 
   }
 
