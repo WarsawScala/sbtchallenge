@@ -5,9 +5,10 @@ import org.scalacheck.Prop._
 import org.scalatest.prop.Checkers
 
 class ErrorSpec extends AbstractSpec with Checkers {
+  implicit val splitter = new EvaluateConfigurationsScalania
 
   "Errors " should {
-    "Show contains line number" in {
+    "Show error line number" in {
 
       check(forAll(alphaStr) {
         (errorText) =>
@@ -27,21 +28,32 @@ class ErrorSpec extends AbstractSpec with Checkers {
                        |  "ch.qos.logback" % "logback-classic" % "1.1.2"
                        |)""".stripMargin
 
-            implicit val splitter = new EvaluateConfigurationsScalania
-            val exception = intercept[MessageOnlyException] {
-              split(buildSbt)
-            }
-            val error = exception.getMessage
-            """(\d+)""".r.findFirstIn(error) match {
-              case Some(x) =>
-                true
-              case None => println(s"Number not found in $error")
-                false
-            }
+
+            containsLineNumber(buildSbt)
           }
       })
+    }
+
+    "Contain line number" in {
+      val buildSbt =
+        """
+          | val a = "ss
+        """.stripMargin
+      containsLineNumber(buildSbt)
     }
   }
 
 
+  private def containsLineNumber(buildSbt: String) = {
+    val exception = intercept[MessageOnlyException] {
+      split(buildSbt)
+    }
+    val error = exception.getMessage
+    """(\d+)""".r.findFirstIn(error) match {
+      case Some(x) =>
+        true
+      case None => println(s"Number not found in $error")
+        false
+    }
+  }
 }
