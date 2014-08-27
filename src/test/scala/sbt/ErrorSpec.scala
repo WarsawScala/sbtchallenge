@@ -2,9 +2,9 @@ package sbt
 
 import org.scalacheck.Gen._
 import org.scalacheck.Prop._
-import org.scalatest.prop.Checkers
+import org.specs2.ScalaCheck
 
-class ErrorSpec extends AbstractSpec with Checkers {
+class ErrorSpec extends AbstractSpec with ScalaCheck  {
   implicit val splitter = new EvaluateConfigurationsScalania
 
   "Errors " should {
@@ -45,15 +45,18 @@ class ErrorSpec extends AbstractSpec with Checkers {
 
 
   private def containsLineNumber(buildSbt: String) = {
-    val exception = intercept[MessageOnlyException] {
+    try {
       split(buildSbt)
-    }
-    val error = exception.getMessage
-    """(\d+)""".r.findFirstIn(error) match {
-      case Some(x) =>
-        true
-      case None => println(s"Number not found in $error")
-        false
+      throw new IllegalStateException()
+    } catch {
+      case exception: MessageOnlyException =>
+        val error = exception.getMessage
+        """(\d+)""".r.findFirstIn(error) match {
+          case Some(x) =>
+            true
+          case None => println(s"Number not found in $error")
+            false
+        }
     }
   }
 }

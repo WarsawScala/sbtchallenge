@@ -1,5 +1,5 @@
 package sbt
 
-import org.scalatest.{Matchers, WordSpecLike}
+import org.specs2.mutable._
 
-trait AbstractSpec extends WordSpecLike with Matchers with SplitExpression
+trait AbstractSpec extends Specification with SplitExpression
