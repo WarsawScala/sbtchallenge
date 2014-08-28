@@ -5,10 +5,10 @@ import java.io.File
 import scala.util.{Failure, Success, Try}
 
 
-case class SplitExpressionsNoBlankies(file:File,lines:Seq[String]) {
-  val (imports,settings) = splitExpressions(file,lines)
+case class SplitExpressionsNoBlankies(file: File, lines: Seq[String]) {
+  val (imports, settings) = splitExpressions(file, lines)
 
-  private def splitExpressions(file:File,lines: Seq[String]): (Seq[(String, Int)], Seq[(String, LineRange)]) = {
+  private def splitExpressions(file: File, lines: Seq[String]): (Seq[(String, Int)], Seq[(String, LineRange)]) = {
     import scala.reflect.runtime._
     import scala.reflect.runtime.universe._
     import scala.tools.reflect.ToolBox
@@ -19,13 +19,16 @@ case class SplitExpressionsNoBlankies(file:File,lines:Seq[String]) {
     val toolbox = mirror.mkToolBox(options = "-Yrangepos")
     val original = lines.mkString("\n")
     val merged = handleXmlContent(original)
+//    if (merged != original) {
+//      println(s"$merged")
+//    }
     val parsed =
       try {
         toolbox.parse(merged)
       } catch {
         case e: ToolBoxError =>
           val seq = toolbox.frontEnd.infos.map { i =>
-            val fileName = if(file==null) "Here should be file name" else file.getAbsolutePath
+            val fileName = if (file == null) "Here should be file name" else file.getAbsolutePath
             s"""[${i.severity}]: [$fileName]:${i.pos.line}: ${i.msg}"""
           }
           throw new MessageOnlyException(
@@ -46,10 +49,18 @@ case class SplitExpressionsNoBlankies(file:File,lines:Seq[String]) {
     }
 
     def convertImport(t: Tree): (String, Int) =
-      (merged.substring(t.pos.start, t.pos.end), t.pos.line)
+      (merged.substring(t.pos.start, t.pos.end), t.pos.line - 1)
 
     def convertStatement(t: Tree): Option[(String, LineRange)] = if (t.pos.isDefined) {
-      Some((merged.substring(t.pos.start, t.pos.end), LineRange(t.pos.line, t.pos.end)))
+      val statement = merged.substring(t.pos.start, t.pos.end)
+      val numberLines = statement.count(c => c == '\n')
+//      println(
+//        s"""$statement
+//           |${t.children.mkString(EOL)}
+//           |${(t.pos.start, t.pos.end)}
+//           |${t.pos}
+//           |""".stripMargin)
+      Some((statement, LineRange(t.pos.line - 1, t.pos.line  + numberLines)))
     } else {
       None
     }
@@ -82,39 +93,57 @@ case class SplitExpressionsNoBlankies(file:File,lines:Seq[String]) {
 
   private def addExplicitXmlContent(str: String, to: Seq[(String, Int, Int)]): String = {
     val statements: Seq[(String, Boolean)] = splitFile(str, to)
-    val builder = new StringBuilder
-    val (wasPreviousXml, wasXml, _) = statements.foldLeft((false, false, "")) {
+    val (builder, wasPreviousXml, wasXml, _) = statements.foldLeft((Seq.empty[String], false, false, "")) {
       (acc, el) =>
-        val (wasXml, _, previous) = acc
+        val (bAcc, wasXml, _, previous) = acc
         val (content, isXml) = el
         val contentEmpty = content.trim.isEmpty
-        val isNotCommentedXml = if (isXml) {
+        val (isNotCommentedXml, newAcc) = if (isXml) {
           if (!wasXml) {
-            val doubleSlash = previous.indexOf("//")
-            val endOfLine = previous.indexOf("\n")
-            if (doubleSlash == -1 || (doubleSlash < endOfLine)) {
-              builder.append(" ( ")
-              true
+            if (addBracketsIfNecessary(previous)) {
+              (true, " ( " +: bAcc)
             } else {
-              false
+              (false, bAcc)
             }
           } else {
-            true
+            (true, bAcc)
           }
         } else if (wasXml && !contentEmpty) {
-          builder.append(" ) ")
-          false
+          (false, " ) " +: bAcc)
         } else {
-          false
+          (false, bAcc)
         }
 
-        builder.append(content)
-        (isNotCommentedXml || (wasXml && contentEmpty), isXml, content)
+        (content +: newAcc, isNotCommentedXml || (wasXml && contentEmpty), isXml, content)
     }
-    if (wasPreviousXml && !wasXml) {
-      builder.append(" ) ")
+    val b = if (wasPreviousXml && !wasXml) {
+      if (builder.headOption.exists(_.trim.isEmpty)) {
+        builder.head +: " ) " +: builder.tail
+      } else {
+        " ) " +: builder
+      }
+    } else {
+      builder
     }
-    builder.toString()
+    b.reverse.mkString
+  }
+
+  private def addBracketsIfNecessary(text: String): Boolean = {
+    val doubleSlash = text.indexOf("//")
+    val endOfLine = text.indexOf("\n")
+    if (doubleSlash == -1 || (doubleSlash < endOfLine)) {
+      val roundBrackets = text.lastIndexOf("(")
+      val braces = text.lastIndexOf("{")
+      val max = roundBrackets.max(braces)
+      if (max == -1) {
+        true
+      } else {
+        val trimmed = text.substring(max + 1).trim
+        trimmed.nonEmpty
+      }
+    } else {
+      false
+    }
   }
 
 

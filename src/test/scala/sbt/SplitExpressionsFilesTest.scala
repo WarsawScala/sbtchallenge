@@ -11,7 +11,7 @@ import scala.tools.reflect.ToolBoxError
 @RunWith(classOf[JUnitRunner])
 class SplitExpressionsFilesTest extends FlatSpec {
 
-   case class SplitterComparison(oldSplitterResult: Try[(Int, Int)], newSplitterResult: Try[(Int, Int)])
+   case class SplitterComparison(oldSplitterResult: Try[(Seq[Int], Seq[LineRange])], newSplitterResult: Try[(Seq[Int], Seq[LineRange])])
 
    val oldSplitter = new EvaluateConfigurationsOriginal
    val newSplitter = new EvaluateConfigurationsScalania
@@ -43,7 +43,7 @@ class SplitExpressionsFilesTest extends FlatSpec {
 
          //TODO: Return actual contents (after making both splitter...
          //TODO: ...implementations return CharRanges instead of LineRanges)
-         Success((imports.length, settingsAndDefs.length))
+         Success((imports.map(_._2), settingsAndDefs.map(_._2)))
       }
       catch {
          case e:ToolBoxError =>
