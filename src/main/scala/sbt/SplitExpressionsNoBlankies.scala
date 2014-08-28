@@ -2,39 +2,41 @@ package sbt
 
 import java.io.File
 
+import scala.compat.Platform._
 import scala.util.{Failure, Success, Try}
-
+import scala.reflect.runtime.universe
+import scala.tools.reflect.ToolBox
 
 case class SplitExpressionsNoBlankies(file: File, lines: Seq[String]) {
   val (imports, settings) = splitExpressions(file, lines)
 
+
   private def splitExpressions(file: File, lines: Seq[String]): (Seq[(String, Int)], Seq[(String, LineRange)]) = {
     import scala.reflect.runtime._
     import scala.reflect.runtime.universe._
-    import scala.tools.reflect.ToolBox
     import scala.tools.reflect.ToolBoxError
     import scala.compat.Platform.EOL
 
+
     val mirror = universe.runtimeMirror(this.getClass.getClassLoader)
     val toolbox = mirror.mkToolBox(options = "-Yrangepos")
-    val original = lines.mkString("\n")
+    val indexedLines = lines.toIndexedSeq
+    val original = indexedLines.mkString("\n")
     val merged = handleXmlContent(original)
-//    if (merged != original) {
-//      println(s"$merged")
-//    }
+    val fileName = if (file == null) "Here should be file name" else file.getAbsolutePath
+    //    if (merged != original) {
+    //      println(s"$merged")
+    //    }
     val parsed =
       try {
         toolbox.parse(merged)
       } catch {
         case e: ToolBoxError =>
           val seq = toolbox.frontEnd.infos.map { i =>
-            val fileName = if (file == null) "Here should be file name" else file.getAbsolutePath
-            s"""[${i.severity}]: [$fileName]:${i.pos.line}: ${i.msg}"""
+            s"""[$fileName]:${i.pos.line}: ${i.msg}"""
           }
           throw new MessageOnlyException(
-            s"""$merged
-               |
-               |${seq.mkString(EOL)}""".stripMargin)
+            s"""${seq.mkString(EOL)}""".stripMargin)
       }
     val parsedTrees = parsed match {
       case Block(stmt, expr) =>
@@ -52,20 +54,73 @@ case class SplitExpressionsNoBlankies(file: File, lines: Seq[String]) {
       (merged.substring(t.pos.start, t.pos.end), t.pos.line - 1)
 
     def convertStatement(t: Tree): Option[(String, LineRange)] = if (t.pos.isDefined) {
-      val statement = merged.substring(t.pos.start, t.pos.end)
-      val numberLines = statement.count(c => c == '\n')
-//      println(
-//        s"""$statement
-//           |${t.children.mkString(EOL)}
-//           |${(t.pos.start, t.pos.end)}
-//           |${t.pos}
-//           |""".stripMargin)
-      Some((statement, LineRange(t.pos.line - 1, t.pos.line  + numberLines)))
+      val originalStatement = merged.substring(t.pos.start, t.pos.end)
+      val (statement, numberLines) = util.Try(toolbox.parse(originalStatement)) match {
+        case Failure(th:ToolBoxError) =>
+          tryWithNextStatement(toolbox, merged, originalStatement, t.pos, fileName,th)
+        case Failure(th) =>
+          throw th
+        case _ =>
+          (originalStatement, originalStatement.count(c => c == '\n'))
+      }
+      val (withComments, numberLinesWithComments) = addComments(statement, t.pos.line, numberLines, indexedLines)
+      Some((withComments, LineRange(t.pos.line - 1, t.pos.line + numberLinesWithComments)))
     } else {
       None
     }
 
     (imports map convertImport, (statements map convertStatement).flatten)
+  }
+
+  private def addComments(s: String, lineNumber: Int, numberLines: Int, lines: IndexedSeq[String]): (String, Int) = {
+    if (lines.size <= lineNumber + numberLines) {
+      (s, numberLines)
+    } else {
+      val line = lines(lineNumber + numberLines)
+      if (line.trim.startsWith("//")) {
+        addComments(s"s\nline", lineNumber, numberLines + 1, lines)
+      } else {
+        (s, numberLines)
+      }
+    }
+
+  }
+
+  private def tryWithNextStatement(toolbox: ToolBox[universe.type], content: String, statement: String, position: universe.Position, fileName: String,th:Throwable): (String, Int) = {
+    findNotCommentedIndex(content, position.end) match {
+      case Some(index) =>
+        val missingText = content.substring(position.end, index + 1)
+        val st = statement + missingText
+        val numberLines = st.count(c => c == '\n')
+        Try(toolbox.parse(st)) match {
+          case Success(_) => (st, numberLines)
+          case Failure(th) =>
+            val seq = toolbox.frontEnd.infos.map { i =>
+              s"""[$fileName]:${position.line}: ${i.msg}"""
+            }
+            throw new MessageOnlyException(
+              s"""${seq.mkString(EOL)}""".stripMargin)
+        }
+      case _ =>
+        throw new MessageOnlyException(s"""[$fileName]:${position.line}: ${th.getMessage}""".stripMargin)
+    }
+  }
+
+  private def findNotCommentedIndex(content: String, from: Int): Option[Int] = {
+    if (from == -1) {
+      None
+    } else {
+      val index = content.indexWhere(c => {
+        !c.isWhitespace
+      }, from)
+      val c = content.charAt(index)
+      if (c == '/' && content.size > index + 1 && content.charAt(index + 1) == '/') {
+        val endOfLine = content.indexOf('\n', index)
+        findNotCommentedIndex(content, endOfLine)
+      } else {
+        Some(index)
+      }
+    }
   }
 
   private[sbt] def handleXmlContent(original: String): String = {
