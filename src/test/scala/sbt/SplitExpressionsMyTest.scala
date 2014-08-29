@@ -18,7 +18,7 @@ class SplitExpressionsMyTest extends FlatSpec {
     val rootPath = getClass.getResource("").getPath + "../old-format/"
     println(s"Reading files from: $rootPath")
     val results = for {
-      path <- new File(rootPath).listFiles.filter(f => f.getName == "20.sbt.txt").map(_.getAbsolutePath).toSeq
+      path <- new File(rootPath).listFiles.filter(f => f.getName == "21.sbt.txt").map(_.getAbsolutePath).toSeq
       lines = Source.fromFile(path).getLines().toList
       comparison = SplitterComparison(splitLines(oldSplitter, lines), splitLines(newSplitter, lines))
     } yield path -> comparison
@@ -35,7 +35,8 @@ class SplitExpressionsMyTest extends FlatSpec {
 
   def splitLines(splitter: SplitExpressions, lines: List[String]): Try[(Seq[Int], Seq[sbt.LineRange])] =
     Try(splitter.splitExpressions(lines)).map {
-      case (imports, settingsAndDefs) => (imports.map(_._2), settingsAndDefs.map(_._2))
+      case (imports, settingsAndDefs) =>
+        (imports.map(_._2), settingsAndDefs.map(_._2))
     }.recover { case (exp: Throwable) =>
       exp.printStackTrace()
       throw exp

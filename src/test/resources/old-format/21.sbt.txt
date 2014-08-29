@@ -1,0 +1,6 @@
+
+libraryDependencies ++= Seq("a" % "b" % "2") map {
+    (dependency) =>{
+        dependency
+    }
+}

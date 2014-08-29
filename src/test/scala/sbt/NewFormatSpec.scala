@@ -15,8 +15,6 @@ class NewFormatSpec extends AbstractSpec{
         path =>
           val lines = Source.fromFile(path).getLines().toList
           val (_,statements) = splitter.splitExpressions(lines)
-          println(s"${lines.size}")
-          println(s"${statements.last._2.end}")
           statements.nonEmpty must be_==(true).orPending( s"""
                        |***should contains statements***
                        |$lines """.stripMargin)
