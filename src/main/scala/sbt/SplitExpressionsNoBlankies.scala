@@ -3,43 +3,7 @@ package sbt
 import java.io.File
 
 import scala.annotation.tailrec
-import scala.compat.Platform._
 import scala.util.{Failure, Success, Try}
-import scala.reflect.runtime.universe
-import scala.tools.reflect.ToolBox
-
-private[sbt] object BugInParser {
-  private[sbt] def tryWithNextStatement(content: String, statement: String, positionEnd: Int, positionLine: Int, fileName: String, th: Throwable): String = {
-    findNotCommentedIndex(content, positionEnd) match {
-      case Some(index) =>
-        content.substring(positionEnd, index + 1)
-      case _ =>
-        throw new MessageOnlyException( s"""[$fileName]:$positionLine: ${th.getMessage}""".stripMargin)
-    }
-  }
-
-  private def findNotCommentedIndex(content: String, from: Int): Option[Int] = {
-    val index = content.indexWhere(c => !c.isWhitespace, from)
-    if (index == -1) {
-      None
-    } else {
-      val c = content.charAt(index)
-      if (c == '/' && content.size > index + 1) {
-        val nextChar = content.charAt(index + 1)
-        if (nextChar == '/') {
-          val endOfLine = content.indexOf('\n', index)
-          findNotCommentedIndex(content, endOfLine)
-        } else {
-          //if (nextChar == '*')
-          val endOfCommented = content.indexOf("*/", index + 1)
-          findNotCommentedIndex(content, endOfCommented + 2)
-        }
-      } else {
-        Some(index)
-      }
-    }
-  }
-}
 
 
 case class SplitExpressionsNoBlankies(file: File, lines: Seq[String]) {
@@ -50,8 +14,11 @@ case class SplitExpressionsNoBlankies(file: File, lines: Seq[String]) {
     import scala.reflect.runtime._
     import scala.reflect.runtime.universe._
     import scala.tools.reflect.ToolBoxError
+    import scala.tools.reflect.ToolBox
     import scala.compat.Platform.EOL
     import BugInParser._
+    import Comments._
+    import XmlContent._
 
     val mirror = universe.runtimeMirror(this.getClass.getClassLoader)
     val toolbox = mirror.mkToolBox(options = "-Yrangepos")
@@ -89,11 +56,9 @@ case class SplitExpressionsNoBlankies(file: File, lines: Seq[String]) {
     def convertStatement(t: Tree): Option[(String, LineRange)] = if (t.pos.isDefined) {
       val originalStatement = merged.substring(t.pos.start, t.pos.end)
       val statement = util.Try(toolbox.parse(originalStatement)) match {
-        case Failure(th: ToolBoxError) =>
+        case Failure(th) =>
           val missingText = tryWithNextStatement(merged, originalStatement, t.pos.end, t.pos.line, fileName, th)
           originalStatement + missingText
-        case Failure(th) =>
-          throw th
         case _ =>
           originalStatement
       }
@@ -107,11 +72,52 @@ case class SplitExpressionsNoBlankies(file: File, lines: Seq[String]) {
     (imports map convertImport, (statements map convertStatement).flatten)
   }
 
-  private def addComments(s: String, lineNumber: Int, numberLines: Int, lines: IndexedSeq[String]) = {
+
+}
+
+
+private[sbt] object BugInParser {
+  private[sbt] def tryWithNextStatement(content: String, statement: String, positionEnd: Int, positionLine: Int, fileName: String, th: Throwable): String = {
+    findNotCommentedIndex(content, positionEnd) match {
+      case Some(index) =>
+        content.substring(positionEnd, index + 1)
+      case _ =>
+        throw new MessageOnlyException( s"""[$fileName]:$positionLine: ${th.getMessage}""".stripMargin)
+    }
+  }
+
+
+  private def findNotCommentedIndex(content: String, from: Int): Option[Int] = {
+    val index = content.indexWhere(c => !c.isWhitespace, from)
+    if (index == -1) {
+      None
+    } else {
+      val c = content.charAt(index)
+      if (c == '/' && content.size > index + 1) {
+        val nextChar = content.charAt(index + 1)
+        if (nextChar == '/') {
+          val endOfLine = content.indexOf('\n', index)
+          findNotCommentedIndex(content, endOfLine)
+        } else {
+          //if (nextChar == '*')
+          val endOfCommented = content.indexOf("*/", index + 1)
+          findNotCommentedIndex(content, endOfCommented + 2)
+        }
+      } else {
+        Some(index)
+      }
+    }
+  }
+}
+
+
+private object Comments {
+  private[sbt] def addComments(s: String, lineNumber: Int, numberLines: Int, lines: IndexedSeq[String]) = {
     val (statement, newNumberLines) = addTwoSlashesComments(s, lineNumber, numberLines, lines)
     addSlashStarComments(statement, lineNumber, newNumberLines, lines)
   }
 
+  @tailrec
   private def addSlashStarComments(s: String, lineNumber: Int, numberLines: Int, lines: IndexedSeq[String]): (String, Int, Int) = {
     if (lineNumber <= 1) {
       (s, numberLines, lineNumber)
@@ -144,6 +150,7 @@ case class SplitExpressionsNoBlankies(file: File, lines: Seq[String]) {
     (seq, seq.size)
   }
 
+  @tailrec
   private def addTwoSlashesComments(s: String, lineNumber: Int, numberLines: Int, lines: IndexedSeq[String]): (String, Int) = {
     if (lines.size <= lineNumber + numberLines) {
       (s, numberLines)
@@ -158,7 +165,10 @@ case class SplitExpressionsNoBlankies(file: File, lines: Seq[String]) {
 
   }
 
+}
 
+
+private object XmlContent {
   private[sbt] def handleXmlContent(original: String): String = {
     val xmlParts = findXmlParts(original)
     if (xmlParts.isEmpty) {
@@ -167,72 +177,6 @@ case class SplitExpressionsNoBlankies(file: File, lines: Seq[String]) {
       addExplicitXmlContent(original, xmlParts)
     }
   }
-
-  private def removeEmbeddedXmlParts(xmlParts: Seq[(String, Int, Int)]) = {
-    def elementBetween(el: (String, Int, Int), open: Int, close: Int): Boolean = {
-      xmlParts.exists {
-        element =>
-          val (_, openIndex, closeIndex) = element
-          el != element && (open > openIndex) && (close < closeIndex)
-      }
-    }
-    xmlParts.filterNot { el =>
-      val (_, open, close) = el
-      elementBetween(el, open, close)
-    }
-  }
-
-  private def addExplicitXmlContent(str: String, xmlParts: Seq[(String, Int, Int)]): String = {
-    val statements: Seq[(String, Boolean)] = splitFile(str, xmlParts)
-    val (builder, wasPreviousXml, wasXml, _) = statements.foldLeft((Seq.empty[String], false, false, "")) {
-      (acc, el) =>
-        val (bAcc, wasXml, _, previous) = acc
-        val (content, isXml) = el
-        val contentEmpty = content.trim.isEmpty
-        val (isNotCommentedXml, newAcc) = if (isXml) {
-          if (!wasXml) {
-            if (addBracketsIfNecessary(previous)) {
-              (true, " ( " +: bAcc)
-            } else {
-              (false, bAcc)
-            }
-          } else {
-            (true, bAcc)
-          }
-        } else if (wasXml && !contentEmpty) {
-          (false, " ) " +: bAcc)
-        } else {
-          (false, bAcc)
-        }
-
-        (content +: newAcc, isNotCommentedXml || (wasXml && contentEmpty), isXml, content)
-    }
-    val b = if (wasPreviousXml && !wasXml) {
-      builder.head +: " ) " +: builder.tail
-    } else {
-      builder
-    }
-    b.reverse.mkString
-  }
-
-  private def addBracketsIfNecessary(text: String): Boolean = {
-    val doubleSlash = text.indexOf("//")
-    val endOfLine = text.indexOf("\n")
-    if (doubleSlash == -1 || (doubleSlash < endOfLine)) {
-      val roundBrackets = text.lastIndexOf("(")
-      val braces = text.lastIndexOf("{")
-      val max = roundBrackets.max(braces)
-      if (max == -1) {
-        true
-      } else {
-        val trimmed = text.substring(max + 1).trim
-        trimmed.nonEmpty
-      }
-    } else {
-      false
-    }
-  }
-
 
   private def splitFile(content: String, ts: Seq[(String, Int, Int)]): Seq[(String, Boolean)] = {
     val (statements, index) = ts.foldLeft((Seq.empty[(String, Boolean)], 0)) {
@@ -250,6 +194,7 @@ case class SplitExpressionsNoBlankies(file: File, lines: Seq[String]) {
     }
     ((content.substring(index, content.length), false) +: statements).reverse
   }
+
 
   private def findXmlParts(content: String) = {
     val xmlParts = findModifiedOpeningTags(content, 0, Seq.empty) ++ findNotModifiedOpeningTags(content, 0, Seq.empty)
@@ -330,6 +275,56 @@ case class SplitExpressionsNoBlankies(file: File, lines: Seq[String]) {
         findNotModifiedOpeningTags(content, closeTagEndIndex + 1, newAcc)
       }
     }
+
+
+  }
+
+
+  private def removeEmbeddedXmlParts(xmlParts: Seq[(String, Int, Int)]) = {
+    def elementBetween(el: (String, Int, Int), open: Int, close: Int): Boolean = {
+      xmlParts.exists {
+        element =>
+          val (_, openIndex, closeIndex) = element
+          el != element && (open > openIndex) && (close < closeIndex)
+      }
+    }
+    xmlParts.filterNot { el =>
+      val (_, open, close) = el
+      elementBetween(el, open, close)
+    }
+  }
+
+  private def addExplicitXmlContent(str: String, xmlParts: Seq[(String, Int, Int)]): String = {
+    val statements: Seq[(String, Boolean)] = splitFile(str, xmlParts)
+    val (builder, wasPreviousXml, wasXml, _) = statements.foldLeft((Seq.empty[String], false, false, "")) {
+      (acc, el) =>
+        val (bAcc, wasXml, _, previous) = acc
+        val (content, isXml) = el
+        val contentEmpty = content.trim.isEmpty
+        val (isNotCommentedXml, newAcc) = if (isXml) {
+          if (!wasXml) {
+            if (addBracketsIfNecessary(previous)) {
+              (true, " ( " +: bAcc)
+            } else {
+              (false, bAcc)
+            }
+          } else {
+            (true, bAcc)
+          }
+        } else if (wasXml && !contentEmpty) {
+          (false, " ) " +: bAcc)
+        } else {
+          (false, bAcc)
+        }
+
+        (content +: newAcc, isNotCommentedXml || (wasXml && contentEmpty), isXml, content)
+    }
+    val b = if (wasPreviousXml && !wasXml) {
+      builder.head +: " ) " +: builder.tail
+    } else {
+      builder
+    }
+    b.reverse.mkString
   }
 
   private def addOptionToCollection[T](acc: Seq[T], option: Option[T]) = option.fold(acc)(el => el +: acc)
@@ -357,4 +352,24 @@ case class SplitExpressionsNoBlankies(file: File, lines: Seq[String]) {
       case Failure(th) => None
     }
   }
+
+  private def addBracketsIfNecessary(text: String): Boolean = {
+    val doubleSlash = text.indexOf("//")
+    val endOfLine = text.indexOf("\n")
+    if (doubleSlash == -1 || (doubleSlash < endOfLine)) {
+      val roundBrackets = text.lastIndexOf("(")
+      val braces = text.lastIndexOf("{")
+      val max = roundBrackets.max(braces)
+      if (max == -1) {
+        true
+      } else {
+        val trimmed = text.substring(max + 1).trim
+        trimmed.nonEmpty
+      }
+    } else {
+      false
+    }
+  }
 }
+
+
