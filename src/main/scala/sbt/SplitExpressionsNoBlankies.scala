@@ -127,8 +127,11 @@ private object Comments {
       if (endCommentIndex == -1) {
         (s, numberLines, lineNumber)
       } else {
-        val (seqLines, lineToAdd) = findStartOfComment(endCommentIndex, lineNumber - 2, lines)
-        addSlashStarComments(seqLines.mkString + s, lineNumber - lineToAdd, numberLines + lineToAdd, lines)
+        findStartOfComment(endCommentIndex, lineNumber - 2, lines) match {
+          case (_, 0) => (s, numberLines, lineNumber) //
+          case (seqLines, lineToAdd) =>
+            addSlashStarComments(seqLines.mkString + s, lineNumber - lineToAdd, numberLines + lineToAdd, lines)
+        }
       }
     }
   }
@@ -136,12 +139,16 @@ private object Comments {
   private def findStartOfComment(endCommentIndex: Int, index: Int, lines: IndexedSeq[String]): (Seq[String], Int) = {
     @tailrec
     def findStartOfComment(index: Int, acc: Seq[String]): Seq[String] = {
-      val line = lines(index)
-      val startCommentedIndex = line.lastIndexOf("/*", endCommentIndex)
-      if (startCommentedIndex == -1) {
-        findStartOfComment(index - 1, line +: acc)
+      if (index == -1) {
+        Seq.empty
       } else {
-        line +: acc
+        val line = lines(index)
+        val startCommentedIndex = line.lastIndexOf("/*", endCommentIndex)
+        if (startCommentedIndex == -1) {
+          findStartOfComment(index - 1, line +: acc)
+        } else {
+          line +: acc
+        }
       }
     }
 

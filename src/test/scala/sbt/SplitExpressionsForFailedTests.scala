@@ -7,7 +7,7 @@ import org.scalatest.FlatSpec
 import scala.io.Source
 import scala.util.{Failure, Success, Try}
 
-class SplitExpressionsMyTest extends FlatSpec {
+class SplitExpressionsForFailedTests extends FlatSpec {
 
   case class SplitterComparison(oldSplitterResult: Try[(Seq[Int], Seq[LineRange])], newSplitterResult: Try[(Seq[Int], Seq[LineRange])])
 
@@ -15,13 +15,13 @@ class SplitExpressionsMyTest extends FlatSpec {
   val newSplitter = new EvaluateConfigurationsScalania
 
   it should "split whole sbt files" in {
-    val rootPath = getClass.getResource("").getPath + "../old-format/"
+    val rootPath = getClass.getResource("").getPath + "../failed-format/"
     println(s"Reading files from: $rootPath")
     val results = for {
-      path <- new File(rootPath).listFiles.filter(f => f.getName == "21.sbt.txt").map(_.getAbsolutePath).toSeq
+      path <- new File(rootPath).listFiles.toSeq
       lines = Source.fromFile(path).getLines().toList
       comparison = SplitterComparison(splitLines(oldSplitter, lines), splitLines(newSplitter, lines))
-    } yield path -> comparison
+    } yield path.getAbsolutePath -> comparison
 
     printResults(results)
 

@@ -13,6 +13,7 @@ class NewFormatSpec extends AbstractSpec{
       val allFiles = new File(rootPath).listFiles.map(_.getAbsolutePath).toList
       foreach(allFiles){
         path =>
+          println(s"$path")
           val lines = Source.fromFile(path).getLines().toList
           val (_,statements) = splitter.splitExpressions(lines)
           statements.nonEmpty must be_==(true).orPending( s"""

@@ -6,58 +6,30 @@ import org.scalacheck.Gen._
 import org.scalacheck.Prop._
 import org.specs2.ScalaCheck
 
+import scala.io.Source
+
 class ErrorSpec extends AbstractSpec with ScalaCheck {
   implicit val splitter = new EvaluateConfigurationsScalania
 
-  "Errors " should {
-    "Show error line number" in {
+  "Parser " should {
 
-      check(forAll(alphaStr) {
-        (errorText) =>
-          errorText.nonEmpty ==> {
-            val buildSbt = s"""import sbt._
-                       |import aaa._
-                       |
-                       |import scala._
-                       |
-                       |scalaVersion in Global := "2.11.2"
-                       |
-                       |ala
-                       |
-                       |libraryDependencies in Global ++= Seq(
-                       |  $errorText
-                       |  "com.typesafe.scala-logging" %% "scala-logging" % "3.1.0",
-                       |  "ch.qos.logback" % "logback-classic" % "1.1.2"
-                       |)""".stripMargin
-
-
-            containsLineNumber(buildSbt)
-          }
-      })
-    }
-
-    "Contain line number" in {
-      val buildSbt =
-        """
-          | val a = "ss
-        """.stripMargin
-      containsLineNumber(buildSbt)
-    }
-
-    "Contains file name " in {
-      val file = new File("target/aa")
-      val buildSbt =
-        s"""
-         | val a = "se
-       """.stripMargin
-
-      SplitExpressionsNoBlankies(file, buildSbt.lines.toSeq) must throwA[MessageOnlyException].like {
-        case exp =>
-          exp.getMessage must contain(file.getName)
+    "contains file name and line number" in {
+      val rootPath = getClass.getResource("").getPath + "../error-format/"
+      println(s"Reading files from: $rootPath")
+      foreach(new File(rootPath).listFiles) { file =>
+        print(s"Processing ${file.getName}: ")
+        val buildSbt = Source.fromFile(file).getLines().mkString("\n")
+        SplitExpressionsNoBlankies(file, buildSbt.lines.toSeq) must throwA[MessageOnlyException].like {
+          case exp =>
+            val message = exp.getMessage
+            println(s"${exp.getMessage}")
+            message must contain(file.getName)
+        }
+        containsLineNumber(buildSbt)
       }
     }
 
-    "Bug in parser " in {
+    "handle wrong parsing " in {
       val buildSbt =
         """
           |libraryDependencies ++= Seq("a" % "b" % "2") map {
