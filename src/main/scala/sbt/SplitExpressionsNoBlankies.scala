@@ -53,7 +53,7 @@ case class SplitExpressionsNoBlankies(file: File, lines: Seq[String]) {
     def convertImport(t: Tree): (String, Int) =
       (merged.substring(t.pos.start, t.pos.end), t.pos.line - 1)
 
-    def convertStatement(t: Tree): Option[(String, LineRange)] = if (t.pos.isDefined) {
+    def convertStatement(t: Tree, previousStatementLine: Int): Option[(String, LineRange)] = if (t.pos.isDefined) {
       val originalStatement = merged.substring(t.pos.start, t.pos.end)
       val statement = util.Try(toolbox.parse(originalStatement)) match {
         case Failure(th) =>
@@ -63,18 +63,24 @@ case class SplitExpressionsNoBlankies(file: File, lines: Seq[String]) {
           originalStatement
       }
       val numberLines = statement.count(c => c == '\n')
-      val (withComments, numberLinesWithComments, position) = addComments(statement, t.pos.line, numberLines, indexedLines)
+      val (withComments, numberLinesWithComments, position) = addComments(statement, t.pos.line, numberLines, indexedLines, previousStatementLine)
       Some((withComments, LineRange(position - 1, position + numberLinesWithComments)))
     } else {
       None
     }
+    val (convertedStatements, _) = statements.foldLeft[(Seq[(String, LineRange)], Int)]((Seq.empty, 1)) {
+      (acc, tree) =>
+        val (accSeq, previousIndex) = acc
+        convertStatement(tree, previousIndex) match {
+          case Some(t) => (t +: accSeq, t._2.end)
+          case _ => (accSeq, previousIndex)
+        }
+    }
 
-    (imports map convertImport, (statements map convertStatement).flatten)
+    (imports map convertImport, convertedStatements.reverse)
   }
 
-
 }
-
 
 private[sbt] object BugInParser {
   private[sbt] def tryWithNextStatement(content: String, statement: String, positionEnd: Int, positionLine: Int, fileName: String, th: Throwable): String = {
@@ -112,14 +118,14 @@ private[sbt] object BugInParser {
 
 
 private object Comments {
-  private[sbt] def addComments(s: String, lineNumber: Int, numberLines: Int, lines: IndexedSeq[String]) = {
+  private[sbt] def addComments(s: String, lineNumber: Int, numberLines: Int, lines: IndexedSeq[String], previousStatementLine: Int) = {
     val (statement, newNumberLines) = addTwoSlashesComments(s, lineNumber, numberLines, lines)
-    addSlashStarComments(statement, lineNumber, newNumberLines, lines)
+    addSlashStarComments(statement, lineNumber, newNumberLines, lines, previousStatementLine)
   }
 
   @tailrec
-  private def addSlashStarComments(s: String, lineNumber: Int, numberLines: Int, lines: IndexedSeq[String]): (String, Int, Int) = {
-    if (lineNumber <= 1) {
+  private def addSlashStarComments(s: String, lineNumber: Int, numberLines: Int, lines: IndexedSeq[String], previousStatementLine: Int): (String, Int, Int) = {
+    if (lineNumber <= previousStatementLine) {
       (s, numberLines, lineNumber)
     } else {
       val line = lines(lineNumber - 2)
@@ -130,7 +136,7 @@ private object Comments {
         findStartOfComment(endCommentIndex, lineNumber - 2, lines) match {
           case (_, 0) => (s, numberLines, lineNumber) //
           case (seqLines, lineToAdd) =>
-            addSlashStarComments(seqLines.mkString + s, lineNumber - lineToAdd, numberLines + lineToAdd, lines)
+            addSlashStarComments(seqLines.mkString + s, lineNumber - lineToAdd, numberLines + lineToAdd, lines, previousStatementLine)
         }
       }
     }
@@ -376,5 +382,3 @@ private object XmlContent {
     }
   }
 }
-
-

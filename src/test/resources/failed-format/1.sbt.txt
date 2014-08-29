@@ -1,6 +1,6 @@
 
-libraryDependencies ++= Seq("a" % "b" % "2") map {
-    (dependency) =>{
-        dependency
-    }
-}
+val s = "/*"
+
+val b = "*/"
+
+val a = 4
