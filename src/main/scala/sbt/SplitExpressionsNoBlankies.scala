@@ -129,7 +129,6 @@ private object Comments {
       } else {
         val (seqLines, lineToAdd) = findStartOfComment(endCommentIndex, lineNumber - 2, lines)
         addSlashStarComments(seqLines.mkString + s, lineNumber - lineToAdd, numberLines + lineToAdd, lines)
-
       }
     }
   }
@@ -164,9 +163,7 @@ private object Comments {
     }
 
   }
-
 }
-
 
 private object XmlContent {
   private[sbt] def handleXmlContent(original: String): String = {
@@ -192,9 +189,10 @@ private object XmlContent {
         val newAccSeq = (statement, true) +: addOptionToCollection(accSeq, textStatementOption)
         (newAccSeq, endIndex)
     }
-    ((content.substring(index, content.length), false) +: statements).reverse
+    val endOfFile = content.substring(index, content.length)
+    val withEndOfFile = (endOfFile, false) +: statements
+    withEndOfFile.reverse
   }
-
 
   private def findXmlParts(content: String) = {
     val xmlParts = findModifiedOpeningTags(content, 0, Seq.empty) ++ findNotModifiedOpeningTags(content, 0, Seq.empty)
@@ -219,6 +217,7 @@ private object XmlContent {
    * @param acc - result
    * @return Set with tags and positions
    */
+  @tailrec
   private def findModifiedOpeningTags(content: String, offsetIndex: Int, acc: Seq[(String, Int, Int)]): Seq[(String, Int, Int)] = {
     val endIndex = content.indexOf("/>", offsetIndex)
     if (endIndex == -1) {
@@ -261,6 +260,7 @@ private object XmlContent {
    * @param acc - result
    * @return Set with tags and positions
    */
+  @tailrec
   private def findNotModifiedOpeningTags(content: String, current: Int, acc: Seq[(String, Int, Int)]): Seq[(String, Int, Int)] = {
     val closeTagStartIndex = content.indexOf("</", current)
     if (closeTagStartIndex == -1) {
@@ -275,13 +275,11 @@ private object XmlContent {
         findNotModifiedOpeningTags(content, closeTagEndIndex + 1, newAcc)
       }
     }
-
-
   }
 
 
   private def removeEmbeddedXmlParts(xmlParts: Seq[(String, Int, Int)]) = {
-    def elementBetween(el: (String, Int, Int), open: Int, close: Int): Boolean = {
+    def isElementBetween(el: (String, Int, Int), open: Int, close: Int): Boolean = {
       xmlParts.exists {
         element =>
           val (_, openIndex, closeIndex) = element
@@ -290,7 +288,7 @@ private object XmlContent {
     }
     xmlParts.filterNot { el =>
       val (_, open, close) = el
-      elementBetween(el, open, close)
+      isElementBetween(el, open, close)
     }
   }
 
@@ -303,7 +301,7 @@ private object XmlContent {
         val contentEmpty = content.trim.isEmpty
         val (isNotCommentedXml, newAcc) = if (isXml) {
           if (!wasXml) {
-            if (addBracketsIfNecessary(previous)) {
+            if (areBracketsNecessary(previous)) {
               (true, " ( " +: bAcc)
             } else {
               (false, bAcc)
@@ -319,12 +317,13 @@ private object XmlContent {
 
         (content +: newAcc, isNotCommentedXml || (wasXml && contentEmpty), isXml, content)
     }
-    val b = if (wasPreviousXml && !wasXml) {
-      builder.head +: " ) " +: builder.tail
-    } else {
-      builder
-    }
-    b.reverse.mkString
+    val closeIfNecessaryBuilder =
+      if (wasPreviousXml && !wasXml) {
+        builder.head +: " ) " +: builder.tail
+      } else {
+        builder
+      }
+    closeIfNecessaryBuilder.reverse.mkString
   }
 
   private def addOptionToCollection[T](acc: Seq[T], option: Option[T]) = option.fold(acc)(el => el +: acc)
@@ -342,7 +341,6 @@ private object XmlContent {
     } else {
       None
     }
-
   }
 
   private def xmlFragmentOption(content: String, openIndex: Int, closeIndex: Int) = {
@@ -353,7 +351,7 @@ private object XmlContent {
     }
   }
 
-  private def addBracketsIfNecessary(text: String): Boolean = {
+  private def areBracketsNecessary(text: String): Boolean = {
     val doubleSlash = text.indexOf("//")
     val endOfLine = text.indexOf("\n")
     if (doubleSlash == -1 || (doubleSlash < endOfLine)) {
