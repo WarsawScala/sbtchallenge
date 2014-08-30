@@ -17,7 +17,6 @@ case class SplitExpressionsNoBlankies(file: File, lines: Seq[String]) {
     import scala.tools.reflect.ToolBox
     import scala.compat.Platform.EOL
     import BugInParser._
-    import Comments._
     import XmlContent._
 
     val mirror = universe.runtimeMirror(this.getClass.getClassLoader)
@@ -63,8 +62,7 @@ case class SplitExpressionsNoBlankies(file: File, lines: Seq[String]) {
           originalStatement
       }
       val numberLines = statement.count(c => c == '\n')
-      val (withComments, numberLinesWithComments, position) = addComments(statement, t.pos.line, numberLines, indexedLines, previousStatementLine)
-      Some((withComments, LineRange(position - 1, position + numberLinesWithComments)))
+      Some((statement, LineRange(t.pos.line - 1, t.pos.line + numberLines)))
     } else {
       None
     }
@@ -117,66 +115,6 @@ private[sbt] object BugInParser {
 }
 
 
-private object Comments {
-  private[sbt] def addComments(s: String, lineNumber: Int, numberLines: Int, lines: IndexedSeq[String], previousStatementLine: Int) = {
-    val (statement, newNumberLines) = addTwoSlashesComments(s, lineNumber, numberLines, lines)
-    addSlashStarComments(statement, lineNumber, newNumberLines, lines, previousStatementLine)
-  }
-
-  @tailrec
-  private def addSlashStarComments(s: String, lineNumber: Int, numberLines: Int, lines: IndexedSeq[String], previousStatementLine: Int): (String, Int, Int) = {
-    if (lineNumber <= previousStatementLine) {
-      (s, numberLines, lineNumber)
-    } else {
-      val line = lines(lineNumber - 2)
-      val endCommentIndex = line.lastIndexOf("*/")
-      if (endCommentIndex == -1) {
-        (s, numberLines, lineNumber)
-      } else {
-        findStartOfComment(endCommentIndex, lineNumber - 2, lines) match {
-          case (_, 0) => (s, numberLines, lineNumber) //
-          case (seqLines, lineToAdd) =>
-            addSlashStarComments(seqLines.mkString + s, lineNumber - lineToAdd, numberLines + lineToAdd, lines, previousStatementLine)
-        }
-      }
-    }
-  }
-
-  private def findStartOfComment(endCommentIndex: Int, index: Int, lines: IndexedSeq[String]): (Seq[String], Int) = {
-    @tailrec
-    def findStartOfComment(index: Int, acc: Seq[String]): Seq[String] = {
-      if (index == -1) {
-        Seq.empty
-      } else {
-        val line = lines(index)
-        val startCommentedIndex = line.lastIndexOf("/*", endCommentIndex)
-        if (startCommentedIndex == -1) {
-          findStartOfComment(index - 1, line +: acc)
-        } else {
-          line +: acc
-        }
-      }
-    }
-
-    val seq = findStartOfComment(index, Seq.empty)
-    (seq, seq.size)
-  }
-
-  @tailrec
-  private def addTwoSlashesComments(s: String, lineNumber: Int, numberLines: Int, lines: IndexedSeq[String]): (String, Int) = {
-    if (lines.size <= lineNumber + numberLines) {
-      (s, numberLines)
-    } else {
-      val line = lines(lineNumber + numberLines)
-      if (line.trim.startsWith("//")) {
-        addTwoSlashesComments(s"s\nline", lineNumber, numberLines + 1, lines)
-      } else {
-        (s, numberLines)
-      }
-    }
-
-  }
-}
 
 private object XmlContent {
   private[sbt] def handleXmlContent(original: String): String = {
