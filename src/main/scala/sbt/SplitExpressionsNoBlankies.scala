@@ -52,7 +52,7 @@ case class SplitExpressionsNoBlankies(file: File, lines: Seq[String]) {
     def convertImport(t: Tree): (String, Int) =
       (merged.substring(t.pos.start, t.pos.end), t.pos.line - 1)
 
-    def convertStatement(t: Tree, previousStatementLine: Int): Option[(String, LineRange)] = if (t.pos.isDefined) {
+    def convertStatement(t: Tree): Option[(String, LineRange)] = if (t.pos.isDefined) {
       val originalStatement = merged.substring(t.pos.start, t.pos.end)
       val statement = util.Try(toolbox.parse(originalStatement)) match {
         case Failure(th) =>
@@ -66,16 +66,8 @@ case class SplitExpressionsNoBlankies(file: File, lines: Seq[String]) {
     } else {
       None
     }
-    val (convertedStatements, _) = statements.foldLeft[(Seq[(String, LineRange)], Int)]((Seq.empty, 1)) {
-      (acc, tree) =>
-        val (accSeq, previousIndex) = acc
-        convertStatement(tree, previousIndex) match {
-          case Some(t) => (t +: accSeq, t._2.end)
-          case _ => (accSeq, previousIndex)
-        }
-    }
 
-    (imports map convertImport, convertedStatements.reverse)
+    (imports map convertImport, statements flatMap convertStatement)
   }
 
 }

@@ -1,9 +1,4 @@
-
-val commonOptions = Seq(
-  "-encoding", "UTF-8", "-optimise", 
-  "-deprecation", "-unchecked", "-feature", "-Xlint")
-// "-explaintypes" - Use when you need more detailed messages for type errors.
-// "-Yinline-warnings" - Warns if constructs have the @inline annotation, but
-// inlining isn't possible. Can be more annoying than useful most of the time,
-// but consider using it for performance critical code.
-
+/* */
+/** Project */
+name := "signal-collect-yarn"
+/* */

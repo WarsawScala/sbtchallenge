@@ -12,21 +12,23 @@ import scala.tools.reflect.ToolBoxError
 import scala.util.{Failure, Success, Try}
 
 
-
-
 @RunWith(classOf[JUnitRunner])
 class SplitExpressionsFilesTest extends AbstractSplitExpressionsFilesTest("../old-format/")
 
 
-abstract class AbstractSplitExpressionsFilesTest(path:String) extends FlatSpec {
+abstract class AbstractSplitExpressionsFilesTest(pathName: String) extends FlatSpec {
 
   case class SplitterComparison(oldSplitterResult: Try[(Seq[(String, Int)], Seq[LineRange])], newSplitterResult: Try[(Seq[(String, Int)], Seq[LineRange])])
 
   val oldSplitter = new EvaluateConfigurationsOriginal
   val newSplitter = new EvaluateConfigurationsScalania
 
+  final val REVERTED_LINES = true
+  final val START_COMMENT = "/*"
+  final val END_COMMENT = START_COMMENT.reverse
+
   it should "split whole sbt files" in {
-    val rootPath = getClass.getResource("").getPath + path
+    val rootPath = getClass.getResource("").getPath + pathName
     println(s"Reading files from: $rootPath")
     val allFiles = new File(rootPath).listFiles.map(_.getAbsolutePath).toList
 
@@ -47,60 +49,78 @@ abstract class AbstractSplitExpressionsFilesTest(path:String) extends FlatSpec {
 
 
   def removeCommentFromStatement(statement: String, lineRange: LineRange): Option[LineRange] = {
-    val lines = statement.lines.toSeq
-    val optionStatements = removeSlashAsterisk(lines, lineRange) match {
+    val lines = statement.lines.toList
+    val optionStatements = removeSlashAsterisk(lines, lineRange,!REVERTED_LINES) match {
       case Some((st, lr)) =>
         removeDoubleSlash(st, lr)
       case _ => None
     }
-    optionStatements.map(t =>  t._2)
+    optionStatements.map(t => t._2)
   }
 
+
   @tailrec
-  private def removeSlashAsterisk(statements: Seq[String], lineRange: LineRange): Option[(Seq[String], LineRange)] = {
+  private def removeSlashAsterisk(statements: Seq[String], lineRange: LineRange,reverted:Boolean): Option[(Seq[String], LineRange)] =
     statements match {
       case statement +: _ =>
-
-        val openSlashAsteriskIndex = statement.indexOf("/*", 0)
+        val openSlashAsteriskIndex = statement.indexOf(START_COMMENT, 0)
         if (openSlashAsteriskIndex == -1 || statement.substring(0, openSlashAsteriskIndex).trim.nonEmpty) {
           Some((statements, lineRange))
         } else {
-          val closeSlashAsteriskLine = statements.indexWhere(s => s.contains("*/"))
+          val closeSlashAsteriskLine = statements.indexWhere(s => s.contains(END_COMMENT))
           if (closeSlashAsteriskLine == -1) {
             Some((statements, lineRange))
           } else {
-            removeSlashAsterisk(statements.drop(closeSlashAsteriskLine + 1), lineRange.copy(start = lineRange.start + closeSlashAsteriskLine + 1))
+            val newLineRange = if(reverted){
+              lineRange.copy(end = lineRange.end - closeSlashAsteriskLine - 1)
+            }else {
+              lineRange.copy(start = lineRange.start + closeSlashAsteriskLine + 1)
+            }
+            removeSlashAsterisk(statements.drop(closeSlashAsteriskLine + 1), newLineRange,reverted)
           }
         }
       case _ =>
         None
     }
-  }
 
+  /**
+   * Remove // and /* */
+   * @param statements - lines
+   * @param lineRange - LineRange
+   * @return (lines,lineRange) without comments
+   */
   def removeDoubleSlash(statements: Seq[String], lineRange: LineRange): Option[(Seq[String], LineRange)] = {
 
+    @tailrec
+    def removeDoubleSlashReversed(lines: Seq[String], lineRange: LineRange): Option[(Seq[String], LineRange)] =
+      lines match {
+        case statement +: _ =>
+          val doubleSlashIndex = statement.indexOf("//")
+          if (doubleSlashIndex == -1 || statement.substring(0, doubleSlashIndex).trim.nonEmpty) {
+            removeSlashAsterisk(lines, lineRange,REVERTED_LINES) match {
+              case some@Some((s, ln)) if ln == lineRange =>
+                some
+              case Some((s, ln)) =>
+                removeDoubleSlashReversed(s, ln)
+              case _ => None
+            }
 
-    def removeDoubleSlashReversed(reversed: Seq[String], lineRange: LineRange): Option[(Seq[String], LineRange)] =
-      reversed match {
-        case headStatement +: _ =>
-          val doubleSlashIndex = headStatement.indexOf("//")
-          if (doubleSlashIndex == -1 || headStatement.substring(0, doubleSlashIndex).trim.nonEmpty) {
-            Some((reversed, lineRange))
           } else {
-            removeDoubleSlashReversed(reversed.tail, lineRange.copy(end = lineRange.end - 1))
+            removeDoubleSlashReversed(lines.tail, lineRange.copy(end = lineRange.end - 1))
           }
-        case _ => None
+        case _ =>
+          None
       }
     removeDoubleSlashReversed(statements.reverse, lineRange).map(t => (t._1.reverse, t._2))
   }
 
-  def splitLines(splitter: SplitExpressions, lines: List[String]):Try[(Seq[(String, Int)], Seq[LineRange])] = {
+  def splitLines(splitter: SplitExpressions, lines: List[String]): Try[(Seq[(String, Int)], Seq[LineRange])] = {
     try {
       val (imports, settingsAndDefs) = splitter.splitExpressions(lines)
 
       //TODO: Return actual contents (after making both splitter...
       //TODO: ...implementations return CharRanges instead of LineRanges)
-      val settingsAndDefWithoutComments =  settingsAndDefs.flatMap(t => removeCommentFromStatement(t._1, t._2))
+      val settingsAndDefWithoutComments = settingsAndDefs.flatMap(t => removeCommentFromStatement(t._1, t._2))
       Success((imports.map(imp => (imp._1.trim, imp._2)), settingsAndDefWithoutComments))
     }
     catch {
