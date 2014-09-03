@@ -2,9 +2,7 @@ package sbt
 
 import java.io.File
 
-import org.junit.runner.RunWith
-import org.scalatest.FlatSpec
-import org.scalatest.junit.JUnitRunner
+import org.specs2.mutable.Specification
 
 import scala.annotation.tailrec
 import scala.io.Source
@@ -12,11 +10,10 @@ import scala.tools.reflect.ToolBoxError
 import scala.util.{Failure, Success, Try}
 
 
-@RunWith(classOf[JUnitRunner])
 class SplitExpressionsFilesTest extends AbstractSplitExpressionsFilesTest("../old-format/")
 
 
-abstract class AbstractSplitExpressionsFilesTest(pathName: String) extends FlatSpec {
+abstract class AbstractSplitExpressionsFilesTest(pathName: String) extends Specification {
 
   case class SplitterComparison(oldSplitterResult: Try[(Seq[(String, Int)], Seq[LineRange])], newSplitterResult: Try[(Seq[(String, Int)], Seq[LineRange])])
 
@@ -27,30 +24,31 @@ abstract class AbstractSplitExpressionsFilesTest(pathName: String) extends FlatS
   final val START_COMMENT = "/*"
   final val END_COMMENT = START_COMMENT.reverse
 
-  it should "split whole sbt files" in {
-    val rootPath = getClass.getResource("").getPath + pathName
-    println(s"Reading files from: $rootPath")
-    val allFiles = new File(rootPath).listFiles.map(_.getAbsolutePath).toList
+  s"$getClass " should {
+    "split whole sbt files" in {
+      val rootPath = getClass.getResource("").getPath + pathName
+      println(s"Reading files from: $rootPath")
+      val allFiles = new File(rootPath).listFiles.map(_.getAbsolutePath).toList
 
-    val results = for {
-      path <- allFiles
-      lines = Source.fromFile(path).getLines().toList
-      comparison = SplitterComparison(splitLines(oldSplitter, lines), splitLines(newSplitter, lines))
-    } yield path -> comparison
+      val results = for {
+        path <- allFiles
+        lines = Source.fromFile(path).getLines().toList
+        comparison = SplitterComparison(splitLines(oldSplitter, lines), splitLines(newSplitter, lines))
+      } yield path -> comparison
 
-    printResults(results)
+      printResults(results)
 
-    val validResults = results.collect {
-      case (path, SplitterComparison(Success(oldRes), Success(newRes))) if oldRes == newRes => path
+      val validResults = results.collect {
+        case (path, SplitterComparison(Success(oldRes), Success(newRes))) if oldRes == newRes => path
+      }
+
+      validResults.length must be_==(results.length).orPending(" - Errors or result differences occurred.")
     }
-
-    assert(validResults.length === results.length, " - Errors or result differences occurred.")
   }
-
 
   def removeCommentFromStatement(statement: String, lineRange: LineRange): Option[LineRange] = {
     val lines = statement.lines.toList
-    val optionStatements = removeSlashAsterisk(lines, lineRange,!REVERTED_LINES) match {
+    val optionStatements = removeSlashAsterisk(lines, lineRange, !REVERTED_LINES) match {
       case Some((st, lr)) =>
         removeDoubleSlash(st, lr)
       case _ => None
@@ -60,7 +58,7 @@ abstract class AbstractSplitExpressionsFilesTest(pathName: String) extends FlatS
 
 
   @tailrec
-  private def removeSlashAsterisk(statements: Seq[String], lineRange: LineRange,reverted:Boolean): Option[(Seq[String], LineRange)] =
+  private def removeSlashAsterisk(statements: Seq[String], lineRange: LineRange, reverted: Boolean): Option[(Seq[String], LineRange)] =
     statements match {
       case statement +: _ =>
         val openSlashAsteriskIndex = statement.indexOf(START_COMMENT, 0)
@@ -71,12 +69,12 @@ abstract class AbstractSplitExpressionsFilesTest(pathName: String) extends FlatS
           if (closeSlashAsteriskLine == -1) {
             Some((statements, lineRange))
           } else {
-            val newLineRange = if(reverted){
+            val newLineRange = if (reverted) {
               lineRange.copy(end = lineRange.end - closeSlashAsteriskLine - 1)
-            }else {
+            } else {
               lineRange.copy(start = lineRange.start + closeSlashAsteriskLine + 1)
             }
-            removeSlashAsterisk(statements.drop(closeSlashAsteriskLine + 1), newLineRange,reverted)
+            removeSlashAsterisk(statements.drop(closeSlashAsteriskLine + 1), newLineRange, reverted)
           }
         }
       case _ =>
@@ -97,7 +95,7 @@ abstract class AbstractSplitExpressionsFilesTest(pathName: String) extends FlatS
         case statement +: _ =>
           val doubleSlashIndex = statement.indexOf("//")
           if (doubleSlashIndex == -1 || statement.substring(0, doubleSlashIndex).trim.nonEmpty) {
-            removeSlashAsterisk(lines, lineRange,REVERTED_LINES) match {
+            removeSlashAsterisk(lines, lineRange, REVERTED_LINES) match {
               case some@Some((s, ln)) if ln == lineRange =>
                 some
               case Some((s, ln)) =>

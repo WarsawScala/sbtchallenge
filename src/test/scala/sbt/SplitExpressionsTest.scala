@@ -1,16 +1,13 @@
 package sbt
 
-import org.junit.runner.RunWith
-import org.scalatest.junit.JUnitRunner
-import org.scalatest.FlatSpec
+import org.specs2.mutable.Specification
 
-@RunWith(classOf[JUnitRunner])
-class SplitExpressionsTest extends FlatSpec with SplitExpressionsBehavior {
+class SplitExpressionsTest extends Specification with SplitExpressionsBehavior {
 
-  "EvaluateConfigurationsOriginal" should behave like oldExpressionsSplitter(new EvaluateConfigurationsOriginal)
+  "EvaluateConfigurationsOriginal" should  oldExpressionsSplitter(new EvaluateConfigurationsOriginal)
   
-  "EvaluateConfigurationsScalania" should behave like oldExpressionsSplitter(new EvaluateConfigurationsScalania)
+  "EvaluateConfigurationsScalania" should  oldExpressionsSplitter(new EvaluateConfigurationsScalania)
   
-  "EvaluateConfigurationsScalania" should behave like newExpressionsSplitter(new EvaluateConfigurationsScalania)
+  "EvaluateConfigurationsScalania" should newExpressionsSplitter(new EvaluateConfigurationsScalania)
   
 }
