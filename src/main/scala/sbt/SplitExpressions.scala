@@ -1,5 +1,7 @@
 package sbt
 
-trait SplitExpressions {
-  def splitExpressions(lines: Seq[String]): (Seq[(String, Int)], Seq[(String, LineRange)])
+import java.io.File
+
+object SplitExpressions {
+  type SplitExpression = (File,Seq[String]) => (Seq[(String, Int)], Seq[(String, LineRange)])
 }

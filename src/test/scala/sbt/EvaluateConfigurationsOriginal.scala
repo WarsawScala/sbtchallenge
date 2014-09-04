@@ -11,7 +11,7 @@ object EvaluateConfigurationsOriginal {
   private[this] def firstNonSpaceIs(lit: String) = (_: String).view.dropWhile(isSpace).startsWith(lit)
   private[this] def or[A](a: A => Boolean, b: A => Boolean): A => Boolean = in => a(in) || b(in)
 
-  def splitExpressions(file:File,lines: Seq[String]): (Seq[(String, Int)], Seq[(String, LineRange)]) =
+  def splitExpressions(file: File, lines: Seq[String]): (Seq[(String, Int)], Seq[(String, LineRange)]) =
     {
       val blank = (_: String).forall(isSpace)
       val isImport = firstNonSpaceIs("import ")

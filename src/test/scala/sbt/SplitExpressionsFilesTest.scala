@@ -7,18 +7,15 @@ import org.specs2.mutable.Specification
 import scala.annotation.tailrec
 import scala.io.Source
 import scala.tools.reflect.ToolBoxError
-import scala.util.{Failure, Success, Try}
-
 
 class SplitExpressionsFilesTest extends AbstractSplitExpressionsFilesTest("../old-format/")
 
-
 abstract class AbstractSplitExpressionsFilesTest(pathName: String) extends Specification {
 
-  case class SplitterComparison(oldSplitterResult: Try[(Seq[(String, Int)], Seq[LineRange])], newSplitterResult: Try[(Seq[(String, Int)], Seq[LineRange])])
+  case class SplitterComparison(oldSplitterResult: util.Try[(Seq[(String, Int)], Seq[LineRange])], newSplitterResult: util.Try[(Seq[(String, Int)], Seq[LineRange])])
 
-  val oldSplitter = new EvaluateConfigurationsOriginal
-  val newSplitter = new EvaluateConfigurationsScalania
+  val oldSplitter: SplitExpressions.SplitExpression = EvaluateConfigurationsOriginal.splitExpressions
+  val newSplitter: SplitExpressions.SplitExpression = EvaluateConfigurations.splitExpressions
 
   final val REVERTED_LINES = true
   final val START_COMMENT = "/*"
@@ -28,21 +25,21 @@ abstract class AbstractSplitExpressionsFilesTest(pathName: String) extends Speci
     "split whole sbt files" in {
       val rootPath = getClass.getResource("").getPath + pathName
       println(s"Reading files from: $rootPath")
-      val allFiles = new File(rootPath).listFiles.map(_.getAbsolutePath).toList
+      val allFiles = new File(rootPath).listFiles.toList
 
       val results = for {
         path <- allFiles
         lines = Source.fromFile(path).getLines().toList
-        comparison = SplitterComparison(splitLines(oldSplitter, lines), splitLines(newSplitter, lines))
+        comparison = SplitterComparison(splitLines(path, oldSplitter, lines), splitLines(path, newSplitter, lines))
       } yield path -> comparison
 
       printResults(results)
 
       val validResults = results.collect {
-        case (path, SplitterComparison(Success(oldRes), Success(newRes))) if oldRes == newRes => path
+        case (path, SplitterComparison(util.Success(oldRes), util.Success(newRes))) if oldRes == newRes => path
       }
 
-      validResults.length must be_==(results.length).orPending(" - Errors or result differences occurred.")
+      validResults.length must be_==(results.length)
     }
   }
 
@@ -55,7 +52,6 @@ abstract class AbstractSplitExpressionsFilesTest(pathName: String) extends Speci
     }
     optionStatements.map(t => t._2)
   }
-
 
   @tailrec
   private def removeSlashAsterisk(statements: Seq[String], lineRange: LineRange, reverted: Boolean): Option[(Seq[String], LineRange)] =
@@ -96,7 +92,7 @@ abstract class AbstractSplitExpressionsFilesTest(pathName: String) extends Speci
           val doubleSlashIndex = statement.indexOf("//")
           if (doubleSlashIndex == -1 || statement.substring(0, doubleSlashIndex).trim.nonEmpty) {
             removeSlashAsterisk(lines, lineRange, REVERTED_LINES) match {
-              case some@Some((s, ln)) if ln == lineRange =>
+              case some @ Some((s, ln)) if ln == lineRange =>
                 some
               case Some((s, ln)) =>
                 removeDoubleSlashReversed(s, ln)
@@ -112,32 +108,31 @@ abstract class AbstractSplitExpressionsFilesTest(pathName: String) extends Speci
     removeDoubleSlashReversed(statements.reverse, lineRange).map(t => (t._1.reverse, t._2))
   }
 
-  def splitLines(splitter: SplitExpressions, lines: List[String]): Try[(Seq[(String, Int)], Seq[LineRange])] = {
+  def splitLines(file: File, splitter: SplitExpressions.SplitExpression, lines: List[String]): util.Try[(Seq[(String, Int)], Seq[LineRange])] = {
     try {
-      val (imports, settingsAndDefs) = splitter.splitExpressions(lines)
+      val (imports, settingsAndDefs) = splitter(file, lines)
 
       //TODO: Return actual contents (after making both splitter...
       //TODO: ...implementations return CharRanges instead of LineRanges)
       val settingsAndDefWithoutComments = settingsAndDefs.flatMap(t => removeCommentFromStatement(t._1, t._2))
-      Success((imports.map(imp => (imp._1.trim, imp._2)), settingsAndDefWithoutComments))
-    }
-    catch {
+      util.Success((imports.map(imp => (imp._1.trim, imp._2)), settingsAndDefWithoutComments))
+    } catch {
       case e: ToolBoxError =>
-        Failure(e)
+        util.Failure(e)
       case e: Throwable =>
-        Failure(e)
+        util.Failure(e)
     }
   }
 
-  def printResults(results: List[(String, SplitterComparison)]) = {
-    for ((path, comparison) <- results) {
-      val fileName = new File(path).getName
+  def printResults(results: List[(File, SplitterComparison)]) = {
+    for ((file, comparison) <- results) {
+      val fileName = file.getName
       comparison match {
-        case SplitterComparison(Failure(ex), _) =>
+        case SplitterComparison(util.Failure(ex), _) =>
           println(s"In file: $fileName, old splitter failed. ${ex.toString}")
-        case SplitterComparison(_, Failure(ex)) =>
+        case SplitterComparison(_, util.Failure(ex)) =>
           println(s"In file: $fileName, new splitter failed. ${ex.toString}")
-        case SplitterComparison(Success(resultOld), Success(resultNew)) =>
+        case SplitterComparison(util.Success(resultOld), util.Success(resultNew)) =>
           if (resultOld == resultNew) {
             println(s"In file: $fileName, same results (imports, settings): $resultOld")
           } else {

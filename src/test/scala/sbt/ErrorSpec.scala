@@ -9,7 +9,7 @@ import org.specs2.ScalaCheck
 import scala.io.Source
 
 class ErrorSpec extends AbstractSpec with ScalaCheck {
-  implicit val splitter = new EvaluateConfigurationsScalania
+  implicit val splitter: SplitExpressions.SplitExpression = EvaluateConfigurations.splitExpressions
 
   "Parser " should {
 
@@ -38,10 +38,9 @@ class ErrorSpec extends AbstractSpec with ScalaCheck {
           | } /* */ //
           |}
         """.stripMargin
-      BugInParser.tryWithNextStatement(buildSbt, "", buildSbt.length, 2, "fake.txt", new MessageOnlyException("fake")) must throwA[MessageOnlyException]
+      BugInParser.tryWithNextStatement(buildSbt, buildSbt.length, 2, "fake.txt", new MessageOnlyException("fake")) must throwA[MessageOnlyException]
     }
   }
-
 
   private def containsLineNumber(buildSbt: String) = {
     try {

@@ -3,12 +3,14 @@ package sbt
 import java.io.File
 
 import scala.annotation.tailrec
-import scala.util.{Failure, Success, Try}
+import SplitExpressionsNoBlankies._
 
+object SplitExpressionsNoBlankies {
+  val END_OF_LINE = "\n"
+}
 
 case class SplitExpressionsNoBlankies(file: File, lines: Seq[String]) {
   val (imports, settings) = splitExpressions(file, lines)
-
 
   private def splitExpressions(file: File, lines: Seq[String]): (Seq[(String, Int)], Seq[(String, LineRange)]) = {
     import scala.reflect.runtime._
@@ -22,7 +24,7 @@ case class SplitExpressionsNoBlankies(file: File, lines: Seq[String]) {
     val mirror = universe.runtimeMirror(this.getClass.getClassLoader)
     val toolbox = mirror.mkToolBox(options = "-Yrangepos")
     val indexedLines = lines.toIndexedSeq
-    val original = indexedLines.mkString("\n")
+    val original = indexedLines.mkString(END_OF_LINE)
     val merged = handleXmlContent(original)
     val fileName = if (file == null) "Here should be file name" else file.getAbsolutePath
 
@@ -46,26 +48,27 @@ case class SplitExpressionsNoBlankies(file: File, lines: Seq[String]) {
 
     val (imports, statements) = parsedTrees partition {
       case _: Import => true
-      case _ => false
+      case _         => false
     }
 
     def convertImport(t: Tree): (String, Int) =
       (merged.substring(t.pos.start, t.pos.end), t.pos.line - 1)
 
-    def convertStatement(t: Tree): Option[(String, LineRange)] = if (t.pos.isDefined) {
-      val originalStatement = merged.substring(t.pos.start, t.pos.end)
-      val statement = util.Try(toolbox.parse(originalStatement)) match {
-        case Failure(th) =>
-          val missingText = tryWithNextStatement(merged, originalStatement, t.pos.end, t.pos.line, fileName, th)
-          originalStatement + missingText
-        case _ =>
-          originalStatement
+    def convertStatement(t: Tree): Option[(String, LineRange)] =
+      if (t.pos.isDefined) {
+        val originalStatement = merged.substring(t.pos.start, t.pos.end)
+        val statement = util.Try(toolbox.parse(originalStatement)) match {
+          case util.Failure(th) =>
+            val missingText = tryWithNextStatement(merged, t.pos.end, t.pos.line, fileName, th)
+            originalStatement + missingText
+          case _ =>
+            originalStatement
+        }
+        val numberLines = statement.count(c => c == '\n')
+        Some((statement, LineRange(t.pos.line - 1, t.pos.line + numberLines)))
+      } else {
+        None
       }
-      val numberLines = statement.count(c => c == '\n')
-      Some((statement, LineRange(t.pos.line - 1, t.pos.line + numberLines)))
-    } else {
-      None
-    }
 
     (imports map convertImport, statements flatMap convertStatement)
   }
@@ -73,15 +76,14 @@ case class SplitExpressionsNoBlankies(file: File, lines: Seq[String]) {
 }
 
 private[sbt] object BugInParser {
-  private[sbt] def tryWithNextStatement(content: String, statement: String, positionEnd: Int, positionLine: Int, fileName: String, th: Throwable): String = {
+  private[sbt] def tryWithNextStatement(content: String, positionEnd: Int, positionLine: Int, fileName: String, th: Throwable): String = {
     findNotCommentedIndex(content, positionEnd) match {
       case Some(index) =>
         content.substring(positionEnd, index + 1)
       case _ =>
-        throw new MessageOnlyException( s"""[$fileName]:$positionLine: ${th.getMessage}""".stripMargin)
+        throw new MessageOnlyException(s"""[$fileName]:$positionLine: ${th.getMessage}""".stripMargin)
     }
   }
-
 
   private def findNotCommentedIndex(content: String, from: Int): Option[Int] = {
     val index = content.indexWhere(c => !c.isWhitespace, from)
@@ -105,8 +107,6 @@ private[sbt] object BugInParser {
     }
   }
 }
-
-
 
 private object XmlContent {
   private[sbt] def handleXmlContent(original: String): String = {
@@ -220,7 +220,6 @@ private object XmlContent {
     }
   }
 
-
   private def removeEmbeddedXmlParts(xmlParts: Seq[(String, Int, Int)]) = {
     def isElementBetween(el: (String, Int, Int), open: Int, close: Int): Boolean = {
       xmlParts.exists {
@@ -288,15 +287,15 @@ private object XmlContent {
 
   private def xmlFragmentOption(content: String, openIndex: Int, closeIndex: Int) = {
     val xmlPart = content.substring(openIndex, closeIndex)
-    Try(xml.XML.loadString(xmlPart)) match {
-      case Success(_) => Some((xmlPart, openIndex, closeIndex))
-      case Failure(th) => None
+    util.Try(xml.XML.loadString(xmlPart)) match {
+      case util.Success(_)  => Some((xmlPart, openIndex, closeIndex))
+      case util.Failure(th) => None
     }
   }
 
   private def areBracketsNecessary(text: String): Boolean = {
     val doubleSlash = text.indexOf("//")
-    val endOfLine = text.indexOf("\n")
+    val endOfLine = text.indexOf(END_OF_LINE)
     if (doubleSlash == -1 || (doubleSlash < endOfLine)) {
       val roundBrackets = text.lastIndexOf("(")
       val braces = text.lastIndexOf("{")

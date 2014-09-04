@@ -1,10 +1,8 @@
 package sbt
 
-
 class EmbeddedXmlSpec extends CheckIfParsedSpec {
 
   "File with xml content " should {
-
 
     "Handle last xml part" in {
       val errorLine = """<version>4.0<version>"""
@@ -38,20 +36,18 @@ class EmbeddedXmlSpec extends CheckIfParsedSpec {
           list must contain(index.toString)
       }
 
-
     }
-
 
   }
 
   protected val files = Seq(
-    ( """
+    ("""
         |val p = <a/>
       """.stripMargin, "Xml modified closing tag at end of file", false, true),
-    ( """
+    ("""
         |val p = <a></a>
       """.stripMargin, "Xml at end of file", false, true),
-    ( """|
+    ("""|
         |
         |name := "play-html-compressor"
         |
@@ -88,7 +84,7 @@ class EmbeddedXmlSpec extends CheckIfParsedSpec {
         |val tra = "</scm>"
         |
       """.stripMargin, "Xml in string", false, true),
-    ( """|
+    ("""|
         |
         |name := "play-html-compressor"
         |
@@ -141,7 +137,7 @@ class EmbeddedXmlSpec extends CheckIfParsedSpec {
         |
         |
         |
-      """.stripMargin,"xml with blank line",false,true)
+      """.stripMargin, "xml with blank line", false, true)
   )
 
 }
