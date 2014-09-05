@@ -2,8 +2,9 @@ package sbt
 
 import java.io.File
 
+import sbt.SplitExpressionsNoBlankies._
+
 import scala.annotation.tailrec
-import SplitExpressionsNoBlankies._
 
 object SplitExpressionsNoBlankies {
   val END_OF_LINE = "\n"
@@ -13,13 +14,13 @@ case class SplitExpressionsNoBlankies(file: File, lines: Seq[String]) {
   val (imports, settings) = splitExpressions(file, lines)
 
   private def splitExpressions(file: File, lines: Seq[String]): (Seq[(String, Int)], Seq[(String, LineRange)]) = {
+    import sbt.BugInParser._
+    import sbt.XmlContent._
+
+import scala.compat.Platform.EOL
     import scala.reflect.runtime._
     import scala.reflect.runtime.universe._
-    import scala.tools.reflect.ToolBoxError
-    import scala.tools.reflect.ToolBox
-    import scala.compat.Platform.EOL
-    import BugInParser._
-    import XmlContent._
+    import scala.tools.reflect.{ToolBox, ToolBoxError}
 
     val mirror = universe.runtimeMirror(this.getClass.getClassLoader)
     val toolbox = mirror.mkToolBox(options = "-Yrangepos")
@@ -48,7 +49,7 @@ case class SplitExpressionsNoBlankies(file: File, lines: Seq[String]) {
 
     val (imports, statements) = parsedTrees partition {
       case _: Import => true
-      case _         => false
+      case _ => false
     }
 
     def convertImport(t: Tree): (String, Int) =
@@ -81,7 +82,7 @@ private[sbt] object BugInParser {
       case Some(index) =>
         content.substring(positionEnd, index + 1)
       case _ =>
-        throw new MessageOnlyException(s"""[$fileName]:$positionLine: ${th.getMessage}""".stripMargin)
+        throw new MessageOnlyException( s"""[$fileName]:$positionLine: ${th.getMessage}""".stripMargin)
     }
   }
 
@@ -288,7 +289,7 @@ private object XmlContent {
   private def xmlFragmentOption(content: String, openIndex: Int, closeIndex: Int) = {
     val xmlPart = content.substring(openIndex, closeIndex)
     util.Try(xml.XML.loadString(xmlPart)) match {
-      case util.Success(_)  => Some((xmlPart, openIndex, closeIndex))
+      case util.Success(_) => Some((xmlPart, openIndex, closeIndex))
       case util.Failure(th) => None
     }
   }

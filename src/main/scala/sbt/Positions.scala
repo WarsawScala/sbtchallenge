@@ -4,6 +4,7 @@ sealed trait SourcePosition
 
 sealed trait FilePosition extends SourcePosition {
   def path: String
+
   def startLine: Int
 }
 

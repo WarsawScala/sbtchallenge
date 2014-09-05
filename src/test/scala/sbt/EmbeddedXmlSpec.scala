@@ -41,13 +41,13 @@ class EmbeddedXmlSpec extends CheckIfParsedSpec {
   }
 
   protected val files = Seq(
-    ("""
+    ( """
         |val p = <a/>
       """.stripMargin, "Xml modified closing tag at end of file", false, true),
-    ("""
+    ( """
         |val p = <a></a>
       """.stripMargin, "Xml at end of file", false, true),
-    ("""|
+    ( """|
         |
         |name := "play-html-compressor"
         |
@@ -84,7 +84,7 @@ class EmbeddedXmlSpec extends CheckIfParsedSpec {
         |val tra = "</scm>"
         |
       """.stripMargin, "Xml in string", false, true),
-    ("""|
+    ( """|
         |
         |name := "play-html-compressor"
         |

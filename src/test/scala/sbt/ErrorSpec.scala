@@ -2,8 +2,6 @@ package sbt
 
 import java.io.File
 
-import org.scalacheck.Gen._
-import org.scalacheck.Prop._
 import org.specs2.ScalaCheck
 
 import scala.io.Source
