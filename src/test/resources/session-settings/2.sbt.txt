@@ -1,4 +1,4 @@
-name := "newName"
+name := "newName";scalaVersion := "2.9.2"; organization := "jozwikr"
 libraryDependencies := Seq("org.scala-sbt" %% "sbinary" % "0.4.1")
 
 lazy val checkPom = taskKey[Unit]("check pom to ensure no <type> sections are generated"); checkPom := {
@@ -18,10 +18,7 @@ val a = <aaa>
 */
 
 
-organization := "jozwikr" // OK
 
-scalaVersion := "2.9.2"
 
-organization := "ololol"
 
 

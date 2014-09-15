@@ -1,0 +1,3 @@
+lazy val checkPom = taskKey[Unit]("check pom to ensure no <type> sections are generated"); checkPom := {
+  sys.error(" ")
+};scalacOptions := Seq("-feature") ; val b = 5
