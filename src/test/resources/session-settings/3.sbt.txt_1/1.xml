@@ -2,6 +2,6 @@
     <setting>
         <start>5</start>
         <end>18</end>
-        <set>scmpom := <a/><b a="rt">OK</b></set>
+        <set><![CDATA[scmpom := <a/><b a="rt">OK</b>]]></set>
     </setting>
 </settings>
