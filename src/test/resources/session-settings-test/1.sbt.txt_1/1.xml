@@ -1,7 +1,0 @@
-<settings>
-    <setting>
-        <start>3</start>
-        <end>4</end>
-        <set>scalacOptions := Seq("-deprecation")</set>
-    </setting>
-</settings>

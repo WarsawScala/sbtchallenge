@@ -18,20 +18,20 @@ object SessionSettingsNoBlankies {
       oldLinesToNew(newContent, lineMap.tail)
     }
 
-  private def toNewContent(content: List[String], tuple: (Int, List[(Int, List[String])])): List[String] = {
-    val (from, newSettingSeq) = tuple
+  private def toNewContent(content: List[String], setCommands: (Int, List[(Int, List[String])])): List[String] = {
+    val (from, newSettings) = setCommands
 
-    val newTreeStringSeqMap = newSettingSeq.seq.map {
+    val newTreeStringsMap = newSettings.map {
       case (_, lines) => toTreeStringMap(lines)
     }
-    val to = newSettingSeq.map(_._1).max
+    val to = newSettings.map(_._1).max
     val originalLine = content.slice(from - 1, to - 1)
 
-    val operations = newTreeStringSeqMap.flatMap {
+    val operations = newTreeStringsMap.flatMap {
       map =>
         map.flatMap {
           case (name, (startIndex, statement)) =>
-            val validLines = cutExpression(originalLine,name)
+            val validLines = cutExpression(originalLine, name)
             val treeStringMap = toTreeStringMap(validLines)
             treeStringMap.get(name).map {
               case (t, oldContent) =>
@@ -39,7 +39,7 @@ object SessionSettingsNoBlankies {
             }
         }
     }
-    val statements = originalLine.mkString("\n")
+    val statements = XmlContent.handleXmlContent(originalLine.mkString("\n"))
     val sortedOperations = operations.sortBy(_._1)(REVERSE_ORDERING_INT)
     val newContent = sortedOperations.foldLeft(statements) {
       case (acc, (startIndex, old, newStatement)) =>
@@ -49,7 +49,7 @@ object SessionSettingsNoBlankies {
     content.take(from - 1) ++ newLines ++ content.drop(to - 1)
   }
 
-  private def cutExpression(l: List[String],name:String): List[String] = l match {
+  private def cutExpression(l: List[String], name: String): List[String] = l match {
     case h +: t =>
       val array = h.split(";").filter(_.contains(name))
       array.mkString(";") +: t
@@ -58,8 +58,8 @@ object SessionSettingsNoBlankies {
   }
 
   private def toTreeStringMap(lines: List[String]) = {
-
-    val trees = SplitExpressionsNoBlankies(new File("fake"), lines).settingsTrees
+    val split = SplitExpressionsNoBlankies(new File("fake"), lines)
+    val trees = split.settingsTrees
     val seq = trees.map {
       case (statement, tree) =>
         (extractSettingName(tree), (tree.pos.start, statement))
