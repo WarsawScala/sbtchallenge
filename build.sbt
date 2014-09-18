@@ -6,7 +6,7 @@ scalaVersion := "2.10.4"
 
 libraryDependencies ++= Seq("org.scala-lang" % "scala-compiler" % scalaVersion.value,
   "org.scalacheck" %% "scalacheck" % "1.11.5" % "test",
-  "org.specs2" %% "specs2" % "2.4.1" % "test",
+  "org.specs2" %% "specs2" % "2.4.2" % "test",
   "junit" % "junit" % "4.11" % "test"
 )
 

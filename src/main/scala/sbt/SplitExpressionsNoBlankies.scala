@@ -120,7 +120,7 @@ private[sbt] object BugInParser {
    * @param from - start index
    * @return first not commented index or None
    */
-  private def findFirstNotBlankNotCommentedIndex(content: String, from: Int): Option[Int] = {
+  private[sbt] def findFirstNotBlankNotCommentedIndex(content: String, from: Int): Option[Int] = {
     val index = content.indexWhere(c => !c.isWhitespace, from)
     if (index == -1) {
       None
