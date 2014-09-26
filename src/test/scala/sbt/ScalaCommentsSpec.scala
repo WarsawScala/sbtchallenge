@@ -22,7 +22,7 @@ class ScalaCommentsSpec extends Specification {
           val content = lines.mkString("\n").trim
           SplitExpressionsNoBlankies(file,lines)
           val from = content.substring(0, content.size - 1).lastIndexOf("}")
-          val index = BugInParser.findFirstNotBlankNotCommentedIndex(content, from + 1)
+          val index = BugInParser.findClosingBracketIndex(content, from + 1)
           content should_== content.substring(0, index.get + 1)
       }
 
