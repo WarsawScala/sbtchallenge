@@ -76,6 +76,3 @@ abstract class AbstractSessionSettingsSpec(folder: String, printDetails: Boolean
 }
 
 class SessionSettingsSpec extends AbstractSessionSettingsSpec("../session-settings")
-
-class SessionSettingsForFailSpec extends AbstractSessionSettingsSpec("../session-settings-test", true)
-

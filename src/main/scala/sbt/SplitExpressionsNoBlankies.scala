@@ -9,6 +9,7 @@ import scala.reflect.runtime.universe._
 object SplitExpressionsNoBlankies {
   val END_OF_LINE_CHAR = '\n'
   val END_OF_LINE = String.valueOf(END_OF_LINE_CHAR)
+  private[sbt] val FAKE_FILE = new File("fake")
 }
 
 case class SplitExpressionsNoBlankies(file: File, lines: Seq[String]) {
@@ -54,7 +55,7 @@ case class SplitExpressionsNoBlankies(file: File, lines: Seq[String]) {
 
     val (imports, statements) = parsedTrees partition {
       case _: Import => true
-      case _         => false
+      case _ => false
     }
 
     def convertImport(t: Tree): (String, Int) =
@@ -102,16 +103,22 @@ private[sbt] object BugInParser {
    * @param positionEnd - from index
    * @param positionLine - number of start position line
    * @param fileName - file name
-   * @param th - original exception
+   * @param originalException - original exception
    * @return
    */
-  private[sbt] def findMissingText(content: String, positionEnd: Int, positionLine: Int, fileName: String, th: Throwable): String = {
-//    val scanner = new syntaxAnalyzer.UnitScanner(new CompilationUnit(source))
+  private[sbt] def findMissingText(content: String, positionEnd: Int, positionLine: Int, fileName: String, originalException: Throwable): String = {
     findClosingBracketIndex(content, positionEnd) match {
       case Some(index) =>
-        content.substring(positionEnd, index + 1)
+        val text = content.substring(positionEnd, index + 1)
+        val textWithoutBracket = text.substring(0, text.length - 1)
+        util.Try(SplitExpressionsNoBlankies(FAKE_FILE,textWithoutBracket.lines.toSeq)) match {
+          case util.Success(_) =>
+            text
+          case util.Failure(th) =>
+            findMissingText(content,index + 1,positionLine,fileName,originalException)
+        }
       case _ =>
-        throw new MessageOnlyException(s"""[$fileName]:$positionLine: ${th.getMessage}""".stripMargin)
+        throw new MessageOnlyException( s"""[$fileName]:$positionLine: ${originalException.getMessage}""".stripMargin)
     }
   }
 
@@ -122,24 +129,11 @@ private[sbt] object BugInParser {
    * @return first not commented index or None
    */
   private[sbt] def findClosingBracketIndex(content: String, from: Int): Option[Int] = {
-    val index = content.indexWhere(c => c == '}' || c == ')',from)
+    val index = content.indexWhere(c => c == '}' || c == ')', from)
     if (index == -1) {
       None
     } else {
-      val c = content.charAt(index)
-      if (c == '/' && content.size > index + 1) {
-        val nextChar = content.charAt(index + 1)
-        if (nextChar == '/') {
-          val endOfLine = content.indexOf('\n', index)
-          findClosingBracketIndex(content, endOfLine)
-        } else {
-          //if (nextChar == '*')
-          val endOfCommented = content.indexOf("*/", index + 1)
-          findClosingBracketIndex(content, endOfCommented + 2)
-        }
-      } else {
-        Some(index)
-      }
+      Some(index)
     }
   }
 }
@@ -372,7 +366,7 @@ private object XmlContent {
   private def xmlFragmentOption(content: String, openIndex: Int, closeIndex: Int): Option[(String, Int, Int)] = {
     val xmlPart = content.substring(openIndex, closeIndex)
     util.Try(xml.XML.loadString(xmlPart)) match {
-      case util.Success(_)  => Some((xmlPart, openIndex, closeIndex))
+      case util.Success(_) => Some((xmlPart, openIndex, closeIndex))
       case util.Failure(th) => None
     }
   }

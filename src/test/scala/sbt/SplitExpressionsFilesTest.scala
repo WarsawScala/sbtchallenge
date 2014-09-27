@@ -92,7 +92,7 @@ abstract class AbstractSplitExpressionsFilesTest(pathName: String) extends Speci
           val doubleSlashIndex = statement.indexOf("//")
           if (doubleSlashIndex == -1 || statement.substring(0, doubleSlashIndex).trim.nonEmpty) {
             removeSlashAsterisk(lines, lineRange, REVERTED_LINES) match {
-              case some@Some((s, ln)) if ln == lineRange =>
+              case some @ Some((s, ln)) if ln == lineRange =>
                 some
               case Some((s, ln)) =>
                 removeDoubleSlashReversed(s, ln)

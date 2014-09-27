@@ -21,7 +21,7 @@ class NewFormatSpec extends AbstractSpec {
           println(s"$path")
           val lines = Source.fromFile(path).getLines().toList
           val (_, statements) = splitter(path, lines)
-          statements.nonEmpty must be_==(true).setMessage( s"""
+          statements.nonEmpty must be_==(true).setMessage(s"""
                                |***should contains statements***
                                |$lines """.stripMargin)
       }
