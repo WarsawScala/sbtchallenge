@@ -1,4 +1,4 @@
 package sbt
 
-class SplitExpressionsForFailedTests extends AbstractSplitExpressionsFilesTest("../failed-format/")
+class SplitExpressionsForFailedTests extends AbstractSplitExpressionsFilesTest("../failed-format/",true)
 

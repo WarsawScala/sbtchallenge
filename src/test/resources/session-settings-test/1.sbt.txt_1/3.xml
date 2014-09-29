@@ -1,7 +1,0 @@
-<settings>
-    <setting>
-        <start>2</start>
-        <end>3</end>
-        <set><![CDATA[k4 := ()]]></set>
-    </setting>
-</settings>
